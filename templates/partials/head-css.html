@@ -1,0 +1,100 @@
+{% load django_extended %}
+
+<!-- Simplebar Css -->
+<link rel="stylesheet" href="/static/assets/libs/simplebar/simplebar.min.css">
+<!-- Swiper Css -->
+<link href="/static/assets/libs/swiper/swiper-bundle.min.css" rel="stylesheet">
+<!-- Nouislider Css -->
+<link href="/static/assets/libs/nouislider/nouislider.min.css" rel="stylesheet">
+<!-- Bootstrap Css -->
+<link href="/static/assets/css/bootstrap.min.css" id="bootstrap-style" rel="stylesheet" type="text/css">
+
+<!--icons css-->
+<link href="/static/assets/css/icons.min.css" rel="stylesheet" type="text/css">
+<!-- App Css-->
+<link href="/static/assets/css/app.min.css" id="app-style" rel="stylesheet" type="text/css">
+<!-- Add this before your app.js -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<style>
+    :root {
+    
+    --pe-primary: {{ organization.theme_color }} !important;
+    --pe-primary-rgb: {{ organization.theme_color|hex_to_rgb }} !important;
+    
+    --pe-primary-text-emphasis: {{ organization.theme_color|darken:0.1 }} !important;
+    
+    --pe-primary-bg-subtle: {{ organization.theme_color|rgba:0.1 }} !important;
+    --pe-primary-border-subtle: {{ organization.theme_color|rgba:0.5 }} !important;
+    
+    --pe-app-sidebar-menu-item-color-hover: {{ organization.theme_color }} !important;
+    --pe-app-sidebar-menu-item-color-active: {{ organization.theme_color }} !important;
+    
+    --pe-link-color-rgb: {{ organization.theme_color|hex_to_rgb }} !important;
+    
+    --pe-link-hover-color-rgb: {{ organization.theme_color|darken:0.2|hex_to_rgb }} !important;
+    
+    }
+
+    .app-header .dark-mode-btn .header-btn.active,.app-header .header-profile-btn .header-btn.active {
+        background-color: var(--pe-primary) !important;
+    }
+
+
+    logo-dark, logo-light {
+        height: 35px;
+        width: 34px;
+        display: none;
+    }
+
+    /* Light tema aktifken */
+    /* =========================
+    SIDEBAR = ICON → HER ŞEY GİZLİ
+    ========================= */
+    html[data-sidebar="icon"] .logo-light,
+    html[data-sidebar="icon"] .logo-dark,
+    html[data-sidebar="icon"] .logo-icon {
+        display: none !important;
+    }
+
+    /* =========================
+    SIDEBAR = DEFAULT
+    THEME LOGIC AKTİF
+    ========================= */
+
+    /* Light theme */
+    html[data-bs-theme="light"][data-sidebar="default"] .logo-dark {
+        display: none !important;
+    }
+
+    html[data-bs-theme="light"][data-sidebar="default"] .logo-light {
+        display: block !important;
+    }
+
+    /* Dark theme */
+    html[data-bs-theme="dark"][data-sidebar="default"] .logo-dark {
+        display: block !important;
+    }
+
+    html[data-bs-theme="dark"][data-sidebar="default"] .logo-light {
+        display: none !important;
+    }
+
+    /* =========================
+    LOGO-ICON
+    sadece DEFAULT sidebar’da göster
+    ========================= */
+    html[data-sidebar="default"] .logo-icon {
+        display: none !important;
+    }
+
+    /* icon modda zaten gizli ama netleştirelim */
+    html[data-sidebar="icon"] .logo-icon {
+        display: inline-block !important;
+    }
+</style>
+
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+</style>

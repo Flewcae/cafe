@@ -1,0 +1,908 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load django_extended %}
+{% load ext_permissions %}
+
+{% include "partials/main.html" %}
+{% block meta %}
+{% with title="Ayarlar" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+{% block css %}
+<!-- Uploaded css -->
+<link rel="stylesheet" href="/static/assets/libs/dropzone/dropzone.css">
+<!-- Picker -->
+<link rel="stylesheet" href="/static/assets/libs/air-datepicker/air-datepicker.css">
+<!-- Select -->
+<link rel="stylesheet" href="/static/assets/libs/choices.js/public/assets/styles/choices.min.css">
+<style>
+.avatar-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.avatar-wrapper img {
+    display: block;
+    border-radius: 0.4rem; /* rounded-2 ile uyumlu */
+}
+
+/* overlay */
+.avatar-wrapper::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: var(--pe-primary);
+    opacity: 0.7; /* yoğunluk ayarı */
+    border-radius: 0.4rem;
+    mix-blend-mode: multiply; /* renk karışım efekti */
+}
+.dropzone {
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  background: #fafafa;
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  transition: border-color .2s;
+  position: relative;
+}
+.dropzone .dz-message { margin: 0; text-align: center; }
+.dropzone .dz-message span { font-size: 13px; color: #888; }
+.dropzone .dz-message .dz-icon { font-size: 28px; display: block; margin-bottom: 4px; }
+ 
+/* Transparan arka plan deseni */
+.dropzone .dz-image {
+  background-image:
+    linear-gradient(45deg, #ccc 25%, transparent 25%),
+    linear-gradient(-45deg, #ccc 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #ccc 75%),
+    linear-gradient(-45deg, transparent 75%, #ccc 75%);
+  background-size: 12px 12px;
+  background-position: 0 0, 0 6px, 6px -6px, -6px 0px;
+  background-color: #fff;
+  border-radius: 4px;
+  width: 100% !important;
+  height: auto !important;
+}
+.dropzone .dz-image img {
+  object-fit: contain !important;
+  width: 100% !important;
+  height: auto !important;
+  max-height: 200px;
+  display: block;
+}
+.dropzone .dz-preview { margin: 4px; }
+.dz-details { display: none !important; }
+.dropzone .dz-preview .dz-remove {
+  font-size: 11px;
+  background: rgba(220,53,69,0.85);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 2px 8px;
+  text-decoration: none;
+}
+.dropzone .dz-preview .dz-remove:hover { background: #dc3545; }
+.dropzone.dz-started .dz-message { display: none; }
+</style>
+
+{% endblock %}
+{% block content %}
+
+
+
+{% has_ext_perm user "system_settings" "change" as can_change_system_settings %}
+{% has_ext_perm user "authorizement" "change" as can_change_authorizement %}
+{% has_ext_perm user "users" "change" as can_change_users %}
+{% has_ext_perm user "users" "add" as can_add_users %}
+{% has_ext_perm user "users" "delete" as can_delete_users %}
+
+
+
+
+{% with title_sub="Anasayfa" title="Ayarlar"%}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<div class="col-12">
+    <div class="card card-h-100">
+        <div class="card-header">
+            <!-- Nav tabs -->
+            <ul class="nav gap-3 custom-verti-nav-pills  text-center mb-4" role="tablist">
+                
+                {% if can_change_system_settings %}
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link active d-flex align-items-center gap-2" data-bs-toggle="tab" href="#stk_settings"
+                            role="tab" aria-selected="true" tabindex="-1">
+                            <i class="ri-home-4-line d-block fs-20 mb-1"></i>
+                            <span>Dernek Ayarları</span>
+                        </a>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" href="#email_settings"
+                            role="tab" aria-selected="false">
+                            <i class="ri-mail-line d-block fs-20 mb-1"></i>
+                            <span>Email Ayarları</span>
+                        </a>
+                    </li>
+                {% endif %}
+                
+                {% if can_change_users %}
+                    <li class="nav-item" role="presentation">
+                        <a class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab" href="#user_settings"
+                            role="tab" aria-selected="false">
+                            <i class="ri-group-line d-block fs-20 mb-1"></i>
+                            <span>Yetkililer</span>
+                        </a>
+                    </li>
+                {% endif %}
+                    
+                    
+
+            </ul>
+        </div>
+        <div class="card-body">
+
+            <!-- Tab panes -->
+            <div class="tab-content">
+                {% if can_change_system_settings %}
+                    <div class="tab-pane active show" id="stk_settings" role="tabpanel">
+                        <h4 class="mb-4 fw-semibold">Dernek Ayarları</h4>
+                        
+                        <form method="post" action="{% url 'settings-organization-update' %}" enctype="multipart/form-data" id="orgForm">
+                            {% csrf_token %}
+                        
+                            <!-- Genel Bilgiler -->
+                            <div class="mb-4">
+                            <div class="fw-bold fs-5 py-3 px-4">Genel Bilgiler</div>
+                            <div class="card-body p-4">
+                                <div class="mb-3">
+                                <label class="form-label">Dernek Adı</label>
+                                <input type="text" name="name" class="form-control" placeholder="Şirket adı" value="{{ organization.name }}" />
+                                </div>
+                                <div class="row g-3 mb-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">E-posta</label>
+                                    <input type="email" name="email" class="form-control" placeholder="info@sirket.com" value="{{ organization.email }}" />
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Telefon</label>
+                                    <input type="tel" name="phone_number" class="form-control" placeholder="+90 212 000 00 00" value="{{ organization.phone_number }}" />
+                                </div>
+                                </div>
+                                <div class="mb-0">
+                                <label class="form-label">Adres</label>
+                                <textarea name="address" class="form-control" rows="3" placeholder="Açık adres...">{{ organization.address }}</textarea>
+                                </div>
+                            </div>
+                            </div>
+                        
+                            <!-- Tema Rengi -->
+                            <div class="mb-4">
+                            <div class="fw-bold fs-5 py-3 px-4">Tema Rengi</div>
+                            <div class="card-body p-4">
+                                <label class="form-label d-block">Ana Renk</label>
+                                <div class="d-flex align-items-center gap-3">
+                                <input class="form-control form-control-color p-0 rounded" type="color" id="colorPicker" value="{{ organization.theme_color|default:'#FF0000' }}" style="width:38px;height:38px;cursor:pointer;" />
+                                <input type="text" class="form-control" id="hexDisplay" value="{{ organization.theme_color|default:'#FF0000' }}" readonly style="width:120px;font-family:monospace;" />
+                                <input type="hidden" name="theme_color" id="themeColorInput" value="{{ organization.theme_color|default:'#FF0000' }}" />
+                                </div>
+                            </div>
+                            </div>
+                        
+                            <!-- Logo & Görseller -->
+                            <div class="mb-4">
+                            <div class="fw-bold fs-5 py-3 px-4">Logo & Görseller</div>
+                            <div class="card-body p-4">
+                        
+                                <div class="row g-4 mb-4">
+                                <div class="col-md-6">
+                                    <label class="form-label">Logo – Açık Tema</label>
+                                    <div class="dropzone" id="dz-logo_light"></div>
+                                    <input type="hidden" name="logo_light_clear" id="logo_light_clear" value="" />
+                                    {% if organization.logo_light %}
+                                    <div id="existing-logo_light" data-url="{{ organization.logo_light.url }}" data-name="logo_light" style="display:none;"></div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Logo – Koyu Tema</label>
+                                    <div class="dropzone" id="dz-logo_dark"></div>
+                                    <input type="hidden" name="logo_dark_clear" id="logo_dark_clear" value="" />
+                                    {% if organization.logo_dark %}
+                                    <div id="existing-logo_dark" data-url="{{ organization.logo_dark.url }}" data-name="logo_dark" style="display:none;"></div>
+                                    {% endif %}
+                                </div>
+                                </div>
+                        
+                                <div class="row g-4">
+                                <div class="col-md-4">
+                                    <label class="form-label">Mini Logo – Açık</label>
+                                    <div class="dropzone" id="dz-logo_min_light"></div>
+                                    <input type="hidden" name="logo_min_light_clear" id="logo_min_light_clear" value="" />
+                                    {% if organization.logo_min_light %}
+                                    <div id="existing-logo_min_light" data-url="{{ organization.logo_min_light.url }}" data-name="logo_min_light" style="display:none;"></div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Mini Logo – Koyu</label>
+                                    <div class="dropzone" id="dz-logo_min_dark"></div>
+                                    <input type="hidden" name="logo_min_dark_clear" id="logo_min_dark_clear" value="" />
+                                    {% if organization.logo_min_dark %}
+                                    <div id="existing-logo_min_dark" data-url="{{ organization.logo_min_dark.url }}" data-name="logo_min_dark" style="display:none;"></div>
+                                    {% endif %}
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label">Favicon</label>
+                                    <div class="dropzone" id="dz-favicon"></div>
+                                    <input type="hidden" name="favicon_clear" id="favicon_clear" value="" />
+                                    {% if organization.favicon %}
+                                    <div id="existing-favicon" data-url="{{ organization.favicon.url }}" data-name="favicon" style="display:none;"></div>
+                                    {% endif %}
+                                </div>
+                                </div>
+                        
+                            </div>
+                            </div>
+                        
+                            <!-- Kaydet -->
+                            <div class="d-flex justify-content-end gap-2">
+                            <button type="reset" class="btn btn-outline-secondary">Sıfırla</button>
+                            <button type="submit" class="btn btn-dark px-4">Kaydet</button>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="tab-pane" id="email_settings" role="tabpanel">
+                    <h4 class="mb-4 fw-semibold">Email Ayarları</h4>
+                    
+                    <form method="post" action="{% url 'settings-email-config-update' %}">
+                        {% csrf_token %}
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Mail Server Ayarları</h5>
+                            </div>
+
+                            <div class="card-body">
+
+                                <!-- HOST -->
+                                <div class="mb-3">
+                                    <label class="form-label">SMTP Host</label>
+                                    <input type="text" name="host" class="form-control"
+                                            placeholder="smtp.example.com"
+                                            value="{{ settings.email_config.host|default:'' }}">
+                                </div>
+
+                                <!-- PORT -->
+                                <div class="mb-3">
+                                    <label class="form-label">Port</label>
+                                    <input type="number" name="port" class="form-control"
+                                            placeholder="587"
+                                            value="{{ settings.email_config.port|default:'587' }}">
+                                </div>
+
+                                <!-- PASSWORD -->
+                                <div class="mb-3">
+                                    <label class="form-label">Varsayılan Mail Şifresi</label>
+                                    <input type="password" name="default_password" class="form-control"
+                                            placeholder="••••••••"
+                                            value="{{ settings.email_config.default_password|default:'' }}">
+                                </div>
+
+                                <!-- TIMEOUT -->
+                                <div class="mb-3">
+                                    <label class="form-label">Timeout (saniye)</label>
+                                    <input type="number" name="timeout" class="form-control"
+                                            placeholder="10"
+                                            value="{{ settings.email_config.timeout|default:'10' }}">
+                                </div>
+
+                                <!-- TLS / SSL -->
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input"
+                                                    type="checkbox"
+                                                    name="use_tls"
+                                                    id="use_tls"
+                                                    {% if settings.email_config.use_tls %}checked{% endif %}>
+                                            <label class="form-check-label" for="use_tls">
+                                                TLS Kullan
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input"
+                                                    type="checkbox"
+                                                    name="use_ssl"
+                                                    id="use_ssl"
+                                                    {% if settings.email_config.use_ssl %}checked{% endif %}>
+                                            <label class="form-check-label" for="use_ssl">
+                                                SSL Kullan
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+
+                            <div class="card-footer text-end">
+                                <button type="submit" class="btn btn-primary">
+                                    Kaydet
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                    </div>
+                {% endif %}
+                {% if can_change_users %}
+                    <div class="tab-pane" id="user_settings" role="tabpanel">
+                        <div class="accordion accordion-border-box" id="user_settings_accordion">
+                            
+                            {% if can_add_users %}
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <div class="accordion-button collapsed bg-secondary-subtle" data-bs-toggle="collapse"
+                                            data-bs-target="#demo_accordion_item_new_author" aria-expanded="true"
+                                            aria-controls="demo_accordion_item_new_author">
+                                            <div class="avatar-wrapper avatar-image avatar-lg me-3">
+                                                <img class="img-fluid rounded-2"
+                                                    src="/media/defaults/user.jpeg"
+                                                    alt="avatar image">
+                                            </div>
+                                            <div>
+                                                <p class="text-primary mb-0">Yeni Yetkili</p>
+                                                <p class="text-primary fs-12 mb-0 mt-1">Yeni yetkili oluşturmak için tıkla</p>
+                                            </div>
+                                        </div>
+                                    </h2>
+                                    <div id="demo_accordion_item_new_author" class="accordion-collapse collapse"
+                                        data-bs-parent="#user_settings_accordion">
+                                        <div class="accordion-body">
+                                                <div class="m-3" id="profile_settings_new_user">
+                                                    <form action="{% url 'user-create-user' %}" method="post" enctype="multipart/form-data">
+                                                        {% csrf_token %}
+                                                        <div class="row g-4 mb-4">
+                                                            <div class="col-xxl-12 row align-items-center">
+                                                                <div class="col-auto">
+                                                                    <div class="d-flex align-items-center gap-3">
+                                                                        <div class="position-relative image-picker-wrapper">
+                                                                            <!-- Image -->
+                                                                            <img
+                                                                                src="/media/defaults/user.jpeg"
+                                                                                alt="preview"
+                                                                                class="rounded-circle image-picker-img"
+                                                                                style="width: 80px; height: 80px; object-fit: cover; cursor: pointer;">
+
+                                                                            <!-- Remove Button -->
+                                                                            <button type="button"
+                                                                                style="position: absolute; bottom: -5px; right: -5px;"
+                                                                                class="btn btn-sm btn-danger rounded-pill remove-image">
+                                                                                <i class="ri-delete-bin-5-line"></i>
+                                                                            </button>
+
+                                                                            <!-- Hidden File Input -->
+                                                                            <input type="file"
+                                                                                name="image"
+                                                                                accept="image/*"
+                                                                                class="d-none image-input">
+                                                                        </div>
+
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col">
+                                                                    <label for="firstName" class="form-label">Ad</label>
+                                                                    <div class="form-icon">
+                                                                        <i class="ri-user-line text-muted"></i>
+                                                                        <input type="text" class="form-control form-control-icon"
+                                                                            id="firstName" name="first_name" placeholder="Ad" required >
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col">
+                                                                    <label for="lastName" class="form-label">Soyad</label>
+                                                                    <div class="form-icon">
+                                                                        <i class="ri-user-line text-muted"></i>
+                                                                        <input type="text" class="form-control form-control-icon"
+                                                                            id="lastName" name="last_name" placeholder="Soyad" required >
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-xxl-6">
+                                                                <label for="emailAddress" class="form-label">Email</label>
+                                                                <div class="form-icon">
+                                                                    <i class="ri-mail-line text-muted"></i>
+                                                                    <input type="email" class="form-control form-control-icon"
+                                                                        id="emailAddress" name="email" placeholder="Email" required >
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-xxl-6">
+                                                                <label for="phoneNumber" class="form-label">Telefon Numarası</label>
+                                                                <div class="form-icon">
+                                                                    <i class="ri-phone-line text-muted"></i>
+                                                                    <input type="tel" class="form-control form-control-icon"
+                                                                        id="phoneNumber" name="phone" placeholder="Telefon Numarası" required >
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                                                    </form>
+                                                </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endif %}
+                                
+                            {% for authorized in authorities %}
+                            <div class="accordion-item">
+                                <h2 class="accordion-header" id="heading_{{forloop.counter}}">
+                                    <button class="accordion-button collapsed"
+                                        type="button"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#demo_accordion_item_{{forloop.counter}}"
+                                        aria-expanded="false"
+                                        aria-controls="demo_accordion_item_{{forloop.counter}}">
+                                        
+                                        <div class="avatar-image avatar-lg me-3">
+                                            <img class="img-fluid rounded-2"
+                                                src="{{authorized.image.url}}"
+                                                alt="avatar image">
+                                        </div>
+
+                                        <div>
+                                            <p class="mb-0">{{ authorized.first_name }} {{ authorized.last_name }}</p>
+                                            <p class="fs-12 mb-0 mt-1">Düzenlemek için tıkla</p>
+                                        </div>
+
+                                    </button>
+                                </h2>
+                                <div id="demo_accordion_item_{{forloop.counter}}" class="accordion-collapse collapse"
+                                    data-bs-parent="#user_settings_accordion">
+                                    <div class="accordion-body">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <!-- Nav tabs -->
+                                                <ul class="nav nav-pills flex-column" role="tablist">
+                                                    <li class="nav-item" role="presentation">
+                                                        <a class="nav-link active" data-bs-toggle="tab" href="#profile_settings_{{forloop.counter}}" role="tab" aria-selected="true">
+                                                            <span><i class="ri-user-line"></i></span>
+                                                            <span>Profil Bilgileri</span>
+                                                        </a>
+                                                    </li>
+                                                    <li class="nav-item" role="presentation">
+                                                        <a class="nav-link" data-bs-toggle="tab" href="#password_settings_{{forloop.counter}}" role="tab" aria-selected="false" tabindex="-1">
+                                                            <span><i class="ri-asterisk"></i></span>
+                                                            <span>Şifre Seçenekleri</span>
+                                                        </a>
+                                                    </li>
+                                                    
+                                                    {% if can_change_authorizement %}
+                                                        <li class="nav-item" role="presentation">
+                                                            <a class="nav-link" data-bs-toggle="tab" href="#authorization_settings_{{forloop.counter}}" role="tab" aria-selected="false" tabindex="-1">
+                                                                <span><i class="ri-node-tree"></i></span>
+                                                                <span>Yetkilendirme</span>
+                                                            </a>
+                                                        </li>
+                                                    {% endif %}
+                                                    
+                                                    {% if can_delete_users %}
+                                                    <li class="nav-item">
+                                                        <form action="{% url 'user-delete-auth-user' authorized.id %}" method="post" onsubmit="return confirm('Bu kullanıcıyı silmek istediğinize emin misiniz?');">
+                                                        {% csrf_token %}
+                                                        <button class="nav-link link-danger">
+                                                            <span><i class="ri-delete-bin-5-line"></i></span>
+                                                            <span>Yetkili Kullanıcıyı Sil</span>
+                                                        </button>
+                                                        </form>
+                                                    </li>
+                                                    {% endif %}
+                                                        
+                                                        
+                                                </ul>
+                                            </div>
+                                            <div class="col-md-9">
+                                                <!-- Tab panes -->
+                                                <div class="tab-content pt-3">
+                                                    <div class="tab-pane active show" id="profile_settings_{{forloop.counter}}" role="tabpanel">
+                                                        <h6 class="mt-1">Profil Bilgileri</h6>
+
+                                                        <p class="mb-5">
+                                                            Profil bilgilerinizi güncelleyin.
+                                                        </p>
+
+                                                        <form action="{% url 'user-update-auth-user' authorized.id %}" method="post" enctype="multipart/form-data">
+                                                            {% csrf_token %}
+                                                            <div class="row g-4 mb-4">
+                                                                <div class="col-xxl-12 row align-items-center">
+                                                                    <div class="col-auto">
+                                                                        <div class="d-flex align-items-center gap-3">
+                                                                            <!-- Preview Wrapper -->
+                                                                            <div class="position-relative image-picker-wrapper">
+                                                                                <!-- Image -->
+                                                                                <img
+                                                                                    src="
+                                                                                    {% if authorized.image %} {{ authorized.image.url }} {% else %} /media/defaults/user.jpeg {% endif %} "
+                                                                                    alt="preview"
+                                                                                    class="rounded-circle image-picker-img"
+                                                                                    style="width: 80px; height: 80px; object-fit: cover; cursor: pointer;">
+
+                                                                                <!-- Remove Button -->
+                                                                                <button type="button"
+                                                                                    style="position: absolute; bottom: -5px; right: -5px;"
+                                                                                    class="btn btn-sm btn-danger rounded-pill remove-image">
+                                                                                    <i class="ri-delete-bin-5-line"></i>
+                                                                                </button>
+
+                                                                                <!-- Hidden File Input -->
+                                                                                <input type="file"
+                                                                                    name="image"
+                                                                                    accept="image/*"
+                                                                                    class="d-none image-input">
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="col">
+                                                                        <label for="firstName" class="form-label">Ad</label>
+                                                                        <div class="form-icon">
+                                                                            <i class="ri-user-line text-muted"></i>
+                                                                            <input type="text" class="form-control form-control-icon"
+                                                                                id="firstName" name="first_name" placeholder="Ad" required {% if authorized.first_name %} value="{{ authorized.first_name }}"  {% endif %}>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="col">
+                                                                        <label for="lastName" class="form-label">Soyad</label>
+                                                                        <div class="form-icon">
+                                                                            <i class="ri-user-line text-muted"></i>
+                                                                            <input type="text" class="form-control form-control-icon"
+                                                                                id="lastName" name="last_name" placeholder="Soyad" required {% if authorized.last_name %} value="{{ authorized.last_name }}"  {% endif %}>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-xxl-6">
+                                                                    <label for="emailAddress" class="form-label">Email</label>
+                                                                    <div class="form-icon">
+                                                                        <i class="ri-mail-line text-muted"></i>
+                                                                        <input type="email" class="form-control form-control-icon"
+                                                                            id="emailAddress" name="email" placeholder="Email" required {% if authorized.email %} value="{{ authorized.email }}"  {% endif %}>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="col-xxl-6">
+                                                                    <label for="phoneNumber" class="form-label">Telefon Numarası</label>
+                                                                    <div class="form-icon">
+                                                                        <i class="ri-phone-line text-muted"></i>
+                                                                        <input type="tel" class="form-control form-control-icon"
+                                                                            id="phoneNumber" name="phone" placeholder="Telefon Numarası" required {% if authorized.phone %} value="{{ authorized.phone }}"  {% endif %}>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <button type="submit" class="btn btn-primary">Kaydet</button>
+                                                        </form>
+                                                    </div>
+                                                    <div class="tab-pane" id="password_settings_{{forloop.counter}}" role="tabpanel">
+
+                                                        <h6 class="mt-1 mb-3">Şifre Ayarları</h6>
+
+                                                        <p class="mb-3">
+                                                            Kullanıcı için el ile güçlü bir şifre belirleyebilir veya otomatik bir şifre belirleyip ilgili kanallar üzerinden iletebilirsiniz.
+                                                        </p>
+
+                                                        <!-- Şifre Değiştirme Formu -->
+                                                        <form method="POST" action="{% url 'user-force-password' authorized.id %}">
+                                                            {% csrf_token %}
+
+                                                        <div class="input-group">
+                                                                <input type="password" class="form-control"
+                                                                    placeholder="Yeni şifre belirle" id="force_password"
+                                                                    name="force_password" aria-label="Yeni Şifre"
+                                                                    aria-describedby="force_password_button">
+                                                                <button class="btn btn-primary" type="submit" id="force_password_button"
+                                                                    name="force_password_button">Şifreyi Kaydet</button>
+                                                            </div>
+                                                        </form>
+
+                                                            <div class="d-flex gap-2 mt-3 flex-wrap">
+                                                                <form action="{% url 'user-send-new-password-email' authorized.id %}" method="POST">
+                                                                    {% csrf_token %}
+                                                                    <button type="submit" class="btn btn-outline-secondary">
+                                                                        E-posta ile Otomatik Yeni Şifre Gönder
+                                                                    </button>
+                                                                </form>
+
+                                                                <!-- SMS ile otomatik şifre -->
+                                                                <form action="{% url 'user-send-new-password-phone' authorized.id %}" method="POST">
+                                                                    {% csrf_token %}
+                                                                    <button type="submit" class="btn btn-outline-secondary">
+                                                                        SMS ile Otomatik Yeni Şifre Gönder
+                                                                    </button>
+                                                                </form>
+
+                                                            </div>
+
+                                                    </div>
+                                                    {% if can_change_authorizement %}
+                                                        <div class="tab-pane" id="authorization_settings_{{forloop.counter}}" role="tabpanel">
+                                                            <div class="d-flex justify-content-between align-items-center mb-4">
+                                                                <div>
+                                                                    <p class="text-muted mb-0">{{ authorized.get_full_name }} kullanıcısının izinleri</p>
+                                                                </div>
+                                                                <button type="submit" form="permissions-form" class="btn btn-primary">
+                                                                    <i class="fas fa-save me-2"></i>Değişiklikleri Kaydet
+                                                                </button>
+                                                            </div>
+
+                                                            <form method="post"
+                                                                action="{% url 'user-toggle-permission' authorized.id %}"
+                                                                id="permissions-form"
+                                                                class="needs-validation"
+                                                                novalidate>
+                                                                {% csrf_token %}
+                                                                
+                                                                <div class="row">
+                                                                    {% for perm in permissions %}
+                                                                    <!-- Her satırda 2 kart - col-md-6 -->
+                                                                    <div class="col-md-4 mb-4">
+                                                                        <div class="card h-100 shadow-sm">
+                                                                            <!-- Kart Başlık -->
+                                                                            <div class="card-header d-flex align-items-center justify-content-center">
+                                                                                <h4 class="mb-0 fw-bold text-primary">{{ perm.name }}</h4>
+                                                                            </div>
+                                                                            
+                                                                            <div class="card-body">
+                                                                                <!-- Action'lar için 2x2 grid -->
+                                                                                <div class="row g-3">
+                                                                                    {% for action in perm.actions.all %}
+                                                                                    <!-- Her action için col-6 (yarım genişlik) -->
+                                                                                    <div class="col-6">
+                                                                                        <div class="d-flex flex-column align-items-center justify-content-between">
+                                                                                            <div>
+                                                                                                <label class="form-label mb-1 fw-medium">
+                                                                                                    <i class="fas fa-{{ action.icon|default:'cog' }} me-2 text-muted"></i>
+                                                                                                    {{ action.get_action_display }}
+                                                                                                </label>
+                                                                                                {% if action.description %}
+                                                                                                <small class="text-muted d-block">{{ action.description }}</small>
+                                                                                                {% endif %}
+                                                                                            </div>
+                                                                                            <div class="form-check form-switch ms-2">
+                                                                                                <input
+                                                                                                    class="form-check-input"
+                                                                                                    type="checkbox"
+                                                                                                    name="perm_{{ perm.id }}_{{ action.action }}"
+                                                                                                    {% if action.action in authorized.get_permissions|get_item:perm.code %}
+                                                                                                        checked
+                                                                                                    {% endif %}
+                                                                                                    style="width: 3em; height: 1.5em;"
+                                                                                                >
+                                                                                            </div>
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    {% empty %}
+                                                                                    <div class="col-12">
+                                                                                        <div class="text-center py-3 text-muted">
+                                                                                            <i class="fas fa-ban fa-lg me-2"></i>
+                                                                                            Bu izin için tanımlı işlem bulunmuyor
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    {% endfor %}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    <!-- Her 2 karttan sonra yeni satır için clearfix (responsiveness için) -->
+                                                                    {% if forloop.counter|divisibleby:3 %}
+                                                                    <div class="w-100 d-none d-md-block"></div>
+                                                                    {% endif %}
+                                                                    
+                                                                    {% empty %}
+                                                                    <div class="col-12">
+                                                                        <div class="card">
+                                                                            <div class="card-body text-center py-5">
+                                                                                <i class="fas fa-shield-alt fa-3x text-muted mb-3"></i>
+                                                                                <h5 class="text-muted">Tanımlı izin bulunamadı</h5>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    {% endfor %}
+                                                                </div>
+                                                                
+                                                                <!-- Sabit Kaydet Butonu (Mobil için) -->
+                                                                <div class="d-block d-md-none fixed-bottom bg-white p-3 shadow-lg border-top">
+                                                                    <button type="submit" class="btn btn-primary w-100">
+                                                                        <i class="fas fa-save me-2"></i>Kaydet
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+                                                        </div>
+                                                    {% endif %}
+
+
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+
+                        </div>
+                        
+
+                    </div>
+                {% endif %}
+
+
+
+            </div>
+        </div>
+    </div>
+</div><!--End col-->
+
+
+
+{% endblock content %}
+{% block js %}
+
+{% has_ext_perm user "system_settings" "change" as can_change_system_settings %}
+{% has_ext_perm user "authorizement" "change" as can_change_authorizement %}
+{% has_ext_perm user "users" "change" as can_change_users %}
+{% has_ext_perm user "users" "add" as can_add_users %}
+{% has_ext_perm user "users" "delete" as can_delete_users %}
+
+<script src="https://cdn.jsdelivr.net/npm/dropzone@5.9.3/dist/min/dropzone.min.js"></script>
+
+
+{% if can_change_system_settings %}
+    <script>
+    Dropzone.autoDiscover = false;
+    
+    const imageFields = ['logo_light', 'logo_dark', 'logo_min_light', 'logo_min_dark', 'favicon'];
+    
+    imageFields.forEach(function(field) {
+    var dz = new Dropzone('#dz-' + field, {
+        url: '#',
+        autoProcessQueue: false,
+        maxFiles: 1,
+        acceptedFiles: 'image/*,.ico',
+        thumbnailWidth: null,
+        thumbnailHeight: null,
+        addRemoveLinks: true,
+        dictRemoveFile: 'Kaldır',
+        dictCancelUpload: 'İptal',
+        dictMaxFilesExceeded: 'Yalnızca 1 dosya yükleyebilirsiniz.',
+        dictDefaultMessage: '<span>Yüklemek için tıkla veya sürükle</span>',
+        init: function() {
+        var self = this;
+    
+        // Mevcut görsel varsa dropzone'a mock file olarak ekle
+        var existingEl = document.getElementById('existing-' + field);
+        if (existingEl && existingEl.dataset.url) {
+            var url = existingEl.dataset.url;
+            var mockFile = { name: field, size: 0, accepted: true, isExisting: true };
+            self.emit('addedfile', mockFile);
+            self.emit('thumbnail', mockFile, url);
+            self.emit('complete', mockFile);
+            self.files.push(mockFile);
+        }
+    
+        self.on('addedfile', function(file) {
+            // max 1 dosya: eskiyi kaldır
+            if (self.files.length > 1) {
+            self.removeFile(self.files[0]);
+            }
+        });
+    
+        self.on('removedfile', function(file) {
+            // hidden file input temizle
+            var fi = document.getElementById('file-' + field);
+            if (fi) fi.remove();
+    
+            if (file.isExisting) {
+            // sunucudaki mevcut görseli sil işaretle
+            document.getElementById(field + '_clear').value = '1';
+            }
+        });
+    
+        self.on('addedfile', function(file) {
+            if (file.isExisting) return; // mock file için atla
+    
+            // clear flag sıfırla (yeni dosya yüklenince silme bayrağını kaldır)
+            document.getElementById(field + '_clear').value = '';
+    
+            // dosyayı forma ekle
+            var dt = new DataTransfer();
+            dt.items.add(file);
+            var fi = document.getElementById('file-' + field);
+            if (!fi) {
+            fi = document.createElement('input');
+            fi.type = 'file';
+            fi.name = field;
+            fi.id = 'file-' + field;
+            fi.style.display = 'none';
+            document.getElementById('orgForm').appendChild(fi);
+            }
+            fi.files = dt.files;
+        });
+        }
+    });
+    });
+    
+    // Renk picker
+    var colorPicker = document.getElementById('colorPicker');
+    var hexDisplay  = document.getElementById('hexDisplay');
+    var themeInput  = document.getElementById('themeColorInput');
+    
+    colorPicker.addEventListener('input', function() {
+    var val = colorPicker.value.toUpperCase();
+    hexDisplay.value = val;
+    themeInput.value = val;
+    });
+    </script>
+{% endif %}
+    
+
+
+{% if can_change_users or can_add_users %}
+    <script>
+    const defaultImage = "/media/defaults/user.jpeg";
+
+    document.querySelectorAll('.image-picker-wrapper').forEach(wrapper => {
+        const input = wrapper.querySelector('.image-input');
+        const preview = wrapper.querySelector('.image-picker-img');
+        const removeBtn = wrapper.querySelector('.remove-image');
+
+        // hidden state (silindi mi?)
+        let isRemoved = false;
+
+        preview.addEventListener('click', () => input.click());
+
+        input.addEventListener('change', function () {
+            const file = this.files[0];
+
+            if (file) {
+                isRemoved = false;
+
+                const reader = new FileReader();
+                reader.onload = e => preview.src = e.target.result;
+                reader.readAsDataURL(file);
+            }
+        });
+
+        removeBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            input.value = "";          // file temizlenir
+            preview.src = defaultImage;
+            isRemoved = true;
+        });
+
+        // form submit anında backend'e bilgi gönder
+        const form = wrapper.closest('form');
+
+        form.addEventListener('submit', function () {
+            // eğer silindiyse backend'e bildir
+            if (isRemoved) {
+                // dynamic hidden input
+                let flag = wrapper.querySelector('input[name="image_removed"]');
+
+                if (!flag) {
+                    flag = document.createElement('input');
+                    flag.type = 'hidden';
+                    flag.name = 'image_removed';
+                    wrapper.appendChild(flag);
+                }
+
+                flag.value = "1";
+            }
+        });
+    });
+    </script>
+{% endif %}
+    
+
+
+
+{% endblock js %}

@@ -1,0 +1,62 @@
+{% extends "partials/layouts/master_auth.html" %}
+{% load static %}
+
+{% include "partials/main.html" %}
+{% block meta %}
+{% with title="Giriş Yap" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+{% block content %}
+
+
+<div class="container">
+  <div class="row justify-content-center align-items-center min-vh-100 pt-20 pb-10">
+    <div class="col-12 col-md-8 col-lg-6 col-xl-5">
+      <div class="card mx-xxl-8 shadow-none">
+        <div class="card-body p-8">
+          <h3 class="fw-medium text-center">Hoşgeldiniz!</h3>
+          <p class="mb-8 text-muted text-center">Oturum açmak için bilgilerinizi doldurunuz...</p>
+          <form method="post">
+            {% csrf_token %}
+            <div class="mb-4">
+              <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="email" name="email" placeholder="Mail Adresi" required>
+            </div>
+            <div class="mb-4">
+              <label for="password" class="form-label">Şifre <span class="text-danger">*</span></label>
+              <div class="position-relative">
+                <input type="password" class="form-control" id="password" name="password" placeholder="Şifre" required>
+                <button type="button"
+                  class="btn btn-link position-absolute end-0 top-0 text-decoration-none text-muted toggle-password"
+                  id="toggle-password" data-target="password"><i class="ri-eye-off-line align-middle"></i></button>
+              </div>
+            </div>
+            <div class="my-6">
+              <div class="d-flex justify-content-between align-items-center">
+                <div class="form-check">
+                  <input type="checkbox" class="form-check-input" id="rememberMe">
+                  <label class="form-check-label" for="rememberMe">Beni Hatırla</label>
+                </div>
+                <div class="form-text">
+                  <a href="auth-forgot-password.html" class="link">Şifreni mi unuttun?</a>
+                </div>
+              </div>
+            </div>
+            <div>
+              <button type="submit" class="btn btn-primary w-100 mb-4">Giriş Yap</button>
+            </div>
+          </form>
+        </div>
+      </div>
+      <p class="position-relative text-center fs-13 mb-0">©
+        <script>document.write(new Date().getFullYear())</script> ANAHTAR PARTİ STK.  Abra tarafından geliştirildi.
+      </p>
+    </div>
+  </div>
+</div>
+
+{% endblock content %}
+{% block js %}
+<script src="{% static 'assets/js/auth/auth.init.js' %}"></script>
+{% endblock js %}

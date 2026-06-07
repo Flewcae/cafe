@@ -1,0 +1,40 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en" class="h-100">
+
+<head>
+    {% block meta %} {% endblock meta %}
+    {% block css %} {% endblock css %}
+    {% include "partials/head-css.html" %}
+
+</head>
+
+<body>
+    <div id="layout-wrapper">
+        {% include "partials/header.html" %}
+        {% include "partials/sidebar.html" %}
+        {% include "partials/horizontal.html" %}
+        <main class="app-wrapper">
+            <div class="container-fluid">
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="mt-3 alert alert-{% if message.tags == "error" %}danger{% else %}info{% endif %} alert-border-left alert-dismissible fade show" role="alert">
+                            <i class="ri-error-warning-line me-3 align-middle"></i>
+                            <strong>{% if message.tags == "error" %}Hata{% else %}Bilgi{% endif %}</strong> - {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+                {% block content %}
+                {% endblock content %}
+            </div><!--End container-fluid-->
+        </main>
+        {% include "partials/switcher.html" %}
+        {% include "partials/scroll-to-top.html" %}
+        {% include "partials/footer.html" %}
+    </div>
+    {% include "partials/vendor-scripts.html" %}
+    {% block js %} {% endblock js %}
+</body>
+
+</html>

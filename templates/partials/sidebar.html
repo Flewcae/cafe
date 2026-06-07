@@ -1,0 +1,31 @@
+<aside class="pe-app-sidebar" id="sidebar">
+    <div class="pe-app-sidebar-logo px-6 d-flex align-items-center position-relative">
+        <!--begin::Brand Image-->
+        <a href="{% url "home" %}" class="d-flex align-items-end ">
+            <img height="40"  class="logo-light" alt="Dark Logo" src="{{organization.logo_dark.url}}">
+            <img height="40"  class="logo-dark" alt="Light Logo" src="{{organization.logo_light.url}}">
+            <img height="40"  class="logo-icon" alt="Icon Logo" src="{{organization.logo_min_light.url}}">
+        </a>
+        <button type="button" id="sidebarDefaultArrow" class="btn btn-sm p-0 fs-16 text-body-emphasis ms-auto float-end d-none icon-hover-btn d-none"><i class="ri-arrow-right-line fs-5"></i></button>
+        <!--end::Brand Image-->
+    </div>
+    <nav class="pe-app-sidebar-menu nav nav-pills" data-simplebar id="sidebar-simplebar">
+        <div class="d-flex align-items-start flex-column w-100">
+            <ul class="pe-main-menu list-unstyled">
+                <li class="pe-menu-title">Genel Bakış</li>
+                <li class="pe-slide pe-has-sub">
+                    <a href="{% url 'home' %}" class="pe-nav-link">
+                        <i class="ri-building-4-line pe-nav-icon"></i>
+                        <span class="pe-nav-content">Anasayfa</span>
+                    </a>
+                </li>
+                <li class="pe-slide pe-has-sub">
+                    <a href="{% url 'settings' %}" class="pe-nav-link">
+                        <i class="ri-settings-line pe-nav-icon"></i>
+                        <span class="pe-nav-content">Ayarlar</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</aside>

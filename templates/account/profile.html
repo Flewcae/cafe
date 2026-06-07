@@ -1,0 +1,1106 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Profil | profile" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<link href="https://cdn.jsdelivr.net/npm/tom-select/dist/css/tom-select.bootstrap5.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+
+<style>
+#cropModal .modal-body {
+    max-height: 70vh;
+}
+
+#cropImage {
+    max-height: 70vh;
+    width: 80%;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "authorizement" "change" as can_change_authorizement %}
+{% has_ext_perm user "passed_activities" "view" as can_view_passed_activities %}
+{% has_ext_perm user "task_reports" "view" as can_view_task_reports %}
+{% has_ext_perm user "social_media_posts" "view" as can_view_social_media_posts %}
+
+
+ 
+
+
+<div class="container-fluid">
+    <div class="pages-profile">
+        <div class="main-breadcrumb d-flex align-items-center my-3 position-relative">
+            <h2 class="breadcrumb-title mb-0 flex-grow-1 fs-14">Profile</h2>
+            <div class="flex-shrink-0">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb justify-content-end mb-0">
+                        <li class="breadcrumb-item"><a href="javascript:void(0)">Page</a></li>
+                        <li class="breadcrumb-item active" aria-current="page">Profile</li>
+                    </ol>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-profile-bg position-relative">
+        <div class="profile-bg">
+            <img src="{% static 'assets/images/anahtar/banner7.webp' %}" alt="Profile Background"
+                class="w-100 h-100 object-fit-cover">
+        </div>
+    </div>
+    <div class="position-relative z-1 text-end edit-btn">
+    </div>
+    <div class="card overflow-hidden position-relative z-1">
+        <div class="card-body p-5">
+            <div class="d-flex justify-content-between flex-wrap align-items-center gap-6">
+                <div class="flex-shrink-0">
+                    <div class="position-relative d-inline-block">
+                        <img src="{{ profile.image.url }}" id="avatarPreview"
+                            class="h-100px w-100px rounded-pill object-fit-cover">
+
+                        <div id="cameraBtn"
+                            class="h-30px w-30px rounded-pill bg-primary d-flex justify-content-center align-items-center text-white
+                                border border-3 border-light-subtle position-absolute fs-12 bottom-0 end-0 cursor-pointer">
+                            <i class="bi bi-camera"></i>
+                        </div>
+                    </div>
+                </div>
+                <input type="file" id="imageInput" accept="image/*" hidden>
+                <div class="flex-grow-1">
+                    <h4 class="mb-1">{{profile}} <i class="bi bi-patch-check-fill fs-16 ms-1 text-success"></i>
+                    </h4>
+                    <p class="text-muted mb-1">{{profile.position}}</p>
+                    <p class="text-muted mb-0">{{profile.presidency}}</p>
+                </div>
+
+                <div class="d-flex float-end gap-2 flex-shrink-0">
+                    <button type="button" class="btn btn-primary"><i class="ri-notification-line me-1"></i>Bildirim
+                        Gönder</button>
+                    <button type="button" class="btn btn-primary"><i class="ri-mail-send-line me-1"></i>E-Posta
+                        Gönder</button>
+                    <button type="button" class="btn btn-primary"><i class="ri-chat-3-line me-1"></i>SMS Gönder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-xl-9 order-last order-xl-2">
+            <div class="card">
+                <div class="card-body p-1">
+                    <ul class="nav nav-pills nav-fill" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <a class="nav-link {% if active_tab == 'profile' %}active{% endif %}" 
+                            href="?tab=profile" role="tab">
+                                <i class="ri-home-2-line me-1"></i> Profil
+                            </a>
+                        </li>
+
+                        
+                        {% if can_change_authorizement %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if active_tab == 'settings' %}active{% endif %}" 
+                                href="?tab=settings" role="tab">
+                                    <i class="ri-settings-3-line me-1"></i> Yetkilendirmeler
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% if can_view_passed_activities %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if active_tab == 'programs' %}active{% endif %}" 
+                                href="?tab=programs" role="tab">
+                                    <i class="ri-calendar-event-line me-1"></i> Etkinlikler
+                                </a>
+                            </li>
+                        {% endif %}
+                        
+                        {% if can_view_task_reports %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if active_tab == 'reports' %}active{% endif %}" 
+                                href="?tab=reports" role="tab">
+                                    <i class="ri-todo-line me-1"></i> Raporlar
+                                </a>
+                            </li>
+                        {% endif %}
+                            
+                        {% if can_view_social_media_posts %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if active_tab == 'posts' %}active{% endif %}" 
+                                href="?tab=posts" role="tab">
+                                    <i class="ri-share-line me-1"></i> Sosyal Paylaşımlar
+                                </a>
+                            </li>
+                        {% endif %}
+
+                        {% if self_profile %}
+                            <li class="nav-item" role="presentation">
+                                <a class="nav-link {% if active_tab == 'password' %}active{% endif %}" 
+                                href="?tab=password" role="tab">
+                                    <i class="ri-share-line me-1"></i> Şifre Değiştir
+                                </a>
+                            </li>
+                        {% endif %}
+                            
+                    </ul>
+                </div>
+            </div>
+
+            <div class="tab-content">
+            
+                <!-- Profil Tab -->
+                <div class="tab-pane {% if active_tab == 'profile' %}active show{% endif %}" id="pages-profile-tab" role="tabpanel">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Özgeçmiş</h5>
+                            
+                            {% if self_profile %}
+                                <a data-bs-toggle="modal" data-bs-target="#editResumeModal" class="badge bg-primary-subtle text-primary cursor-pointer">Düzenle</a>
+                            {% endif %}
+                                
+                        </div>
+                        {% if profile.resume %}
+                        <div class="card-body">
+                            <p>{{profile.resume}}</p>
+                        </div>
+                        {% else %}
+                        <div class="card-body">
+                            <p>Henüz bir özgeçmiş eklenmedi.</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- İstatistik Kartları -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="card-title">Genel Bakış</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="col-12 row">
+                                {% include 'partials/cards/stat_card.html' with href="?tab=programs" icon="ri-calendar-event-line" title="Katıldığı Etkinlikler" count=profile.joined_programs.count color="info" %}
+                                {% include 'partials/cards/stat_card.html' with href="?tab=reports" icon="ri-todo-line" title="Yazdığı Raporlar" count=profile.written_reports.count color="danger" %}
+                                {% include 'partials/cards/stat_card.html' with href="?tab=surveys" icon="ri-questionnaire-line" title="Toplanan Anketler" count=profile.user_collected_answers.count color="warning" %}
+                                {% include 'partials/cards/stat_card.html' with href="?tab=posts" icon="ri-share-line" title="Sosyal Paylaşımlar" count=profile.user_social_posts.count color="success" %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                
+                
+                {% if can_change_authorizement %}
+                    <!-- Yetkilendirme Tab -->
+                    <div class="tab-pane {% if active_tab == 'settings' %}active show{% endif %}"
+                        id="pages-settings-tab"
+                        role="tabpanel">
+                        
+                        <!-- Başlık ve Açıklama -->
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <div>
+                                <h2 class="mb-1">Yetkilendirmeler</h2>
+                                <p class="text-muted mb-0">{{ profile.get_full_name }} kullanıcısının izinleri</p>
+                            </div>
+                            <button type="submit" form="permissions-form" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Değişiklikleri Kaydet
+                            </button>
+                        </div>
+
+                        <form method="post"
+                            action="{% url 'user-toggle-permission' profile.id %}"
+                            id="permissions-form"
+                            class="needs-validation"
+                            novalidate>
+                            {% csrf_token %}
+                            
+                            <div class="row">
+                                {% for perm in permissions %}
+                                <!-- Her satırda 2 kart - col-md-6 -->
+                                <div class="col-md-4 mb-4">
+                                    <div class="card h-100 shadow-sm">
+                                        <!-- Kart Başlık -->
+                                        <div class="card-header d-flex align-items-center justify-content-center">
+                                            <h4 class="mb-0 fw-bold text-primary">{{ perm.name }}</h4>
+                                        </div>
+                                        
+                                        <div class="card-body">
+                                            <!-- Action'lar için 2x2 grid -->
+                                            <div class="row g-3">
+                                                {% for action in perm.actions.all %}
+                                                <!-- Her action için col-6 (yarım genişlik) -->
+                                                <div class="col-6">
+                                                    <div class="d-flex flex-column align-items-center justify-content-between">
+                                                        <div>
+                                                            <label class="form-label mb-1 fw-medium">
+                                                                <i class="fas fa-{{ action.icon|default:'cog' }} me-2 text-muted"></i>
+                                                                {{ action.get_action_display }}
+                                                            </label>
+                                                            {% if action.description %}
+                                                            <small class="text-muted d-block">{{ action.description }}</small>
+                                                            {% endif %}
+                                                        </div>
+                                                        <div class="form-check form-switch ms-2">
+                                                            <input
+                                                                class="form-check-input"
+                                                                type="checkbox"
+                                                                name="perm_{{ perm.id }}_{{ action.action }}"
+                                                                {% if action.action in profile.get_permissions|get_item:perm.code %}
+                                                                    checked
+                                                                {% endif %}
+                                                                style="width: 3em; height: 1.5em;"
+                                                            >
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                {% empty %}
+                                                <div class="col-12">
+                                                    <div class="text-center py-3 text-muted">
+                                                        <i class="fas fa-ban fa-lg me-2"></i>
+                                                        Bu izin için tanımlı işlem bulunmuyor
+                                                    </div>
+                                                </div>
+                                                {% endfor %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Her 2 karttan sonra yeni satır için clearfix (responsiveness için) -->
+                                {% if forloop.counter|divisibleby:3 %}
+                                <div class="w-100 d-none d-md-block"></div>
+                                {% endif %}
+                                
+                                {% empty %}
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-body text-center py-5">
+                                            <i class="fas fa-shield-alt fa-3x text-muted mb-3"></i>
+                                            <h5 class="text-muted">Tanımlı izin bulunamadı</h5>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            
+                            <!-- Sabit Kaydet Butonu (Mobil için) -->
+                            <div class="d-block d-md-none fixed-bottom bg-white p-3 shadow-lg border-top">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    <i class="fas fa-save me-2"></i>Kaydet
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                {% endif %}
+                
+                {% if can_view_passed_activities %}
+                    <!-- Programlar Tab -->
+                    <div class="tab-pane {% if active_tab == 'programs' %}active show{% endif %}" id="pages-programs-tab" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title">Katıldığı Etkinlikler</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if programs %}
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Başlık</th>
+                                                <th>Tür</th>
+                                                <th>Organizatör</th>
+                                                <th>Tarih</th>
+                                                <th>Saat</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for program in programs %}
+                                            <tr>
+                                                <td class="fw-medium">{{ program.title|default:"—" }}</td>
+                                                <td><span class="badge bg-primary">{{ program.get_type_display }}</span></td>
+                                                <td>{{ program.host.name }}</td>
+                                                <td>{{ program.date|date:"d.m.Y" }}</td>
+                                                <td>{{ program.start }} - {{ program.end }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                {% include 'partials/pagination.html' with items=programs tab='programs' %}
+                                
+                                {% else %}
+                                <div class="alert alert-light text-center border">
+                                    Henüz bir etkinliğe katılmadı.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                {% if can_view_task_reports %}
+                    <!-- Raporlar Tab -->
+                    <div class="tab-pane {% if active_tab == 'reports' %}active show{% endif %}" id="pages-reports-tab" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title">Yazdığı Raporlar</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if reports %}
+                                {% for report in reports %}
+                                <div class="card mb-3 border-0 shadow-sm border-start border-4 border-info">
+                                    <div class="card-body">
+                                        <div class="d-flex justify-content-between">
+                                            <h6 class="mb-1 fw-bold">{{ report.squad.presidency.province.name.title }} {{ report.squad.get_policy_info.name }}</h6>
+                                            <small class="text-muted">{{ report.created_at|date:"d.m.Y H:i" }}</small>
+                                        </div>
+
+                                        <p class="text-secondary small mb-2">{{ report.desc }}</p>
+
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <span class="text-muted small">Hazırlayan: {{ report.created_by }}</span>
+
+                                            {% if report.files.exists %}
+                                            <span class="ms-3 badge bg-light text-dark border">
+                                                <i class="ri-attachment-line"></i> {{ report.files.count }} Dosya
+                                            </span>
+                                            {% endif %}
+                                        </div>
+
+                                        {% if report.files.exists %}
+                                        <ul class="list-group fs-13 fw-medium">
+                                            {% for file in report.files.all %}
+                                            <li class="list-group-item list-group-item-info">
+                                                <a href="{{ file.file.url }}" target="_blank" class="text-decoration-none">
+                                                    <i class="ri-file-line me-1"></i>{{ file.title }}
+                                                </a>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% endfor %}
+                                
+                                {% include 'partials/pagination.html' with items=reports tab='reports' %}
+                                
+                                {% else %}
+                                <div class="alert alert-light text-center border">
+                                    Henüz bir rapor yazmadı.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+                
+                {% if can_view_social_media_posts %}
+                    <!-- Sosyal Paylaşımlar Tab -->
+                    <div class="tab-pane {% if active_tab == 'posts' %}active show{% endif %}" id="pages-posts-tab" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title">Sosyal Paylaşımlar</h5>
+                            </div>
+                            <div class="card-body">
+                                {% if posts %}
+                                <div class="table-responsive">
+                                    <table class="table table-hover align-middle">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>İçerik</th>
+                                                <th>Başkanlık</th>
+                                                <th>Tür</th>
+                                                <th>Tarih</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for post in posts %}
+                                            <tr>
+                                                <td class="truncate-cell" style="max-width: 300px;">{{ post.content }}</td>
+                                                <td>{{ post.presidency.name }}</td>
+                                                <td><span class="badge bg-info">{{ post.get_type_display }}</span></td>
+                                                <td>{{ post.created_at|date:"d.m.Y H:i" }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                
+                                {% include 'partials/pagination.html' with items=posts tab='posts' %}
+                                
+                                {% else %}
+                                <div class="alert alert-light text-center border">
+                                    Henüz sosyal paylaşım yapmadı.
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                
+                {% if self_profile %}
+                    <!-- Şifre Tab -->
+                    <div class="tab-pane {% if active_tab == 'password' %}active show{% endif %}" id="pages-password-tab" role="tabpanel">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="card-title">Şifre Değiştir</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="password_form" action="{% url 'user-change-password' %}" method="post">
+                                    {% csrf_token %}
+                                   <div class="mb-3">
+                                        <label for="current_password" class="form-label">Güncel Şifre</label>
+                                        <div class="input-group">
+                                            <input class="form-control" placeholder="Güncel şifrenizi girin" type="password" name="current_password" id="current_password">
+                                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="current_password"><i class="bi bi-eye"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="new_password" class="form-label">Yeni Şifre</label>
+                                        <div class="input-group">
+                                            <input class="form-control" placeholder="Yeni Şifre belirleyin" type="password" name="new_password" id="new_password">
+                                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="new_password"><i class="bi bi-eye"></i></button>
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label for="confirm_password" class="form-label">Yeni Şifre Doğrulama</label>
+                                        <div class="input-group">
+                                            <input class="form-control" placeholder="Yeni şifrenizi tekrar girin" type="password" name="confirm_password" id="confirm_password">
+                                            <button class="btn btn-outline-secondary toggle-password" type="button" data-target="confirm_password"><i class="bi bi-eye"></i></button>
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-primary" type="submit">Şifre Değiştir</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                
+                
+            </div>
+        </div>
+        <div class="col-xl-3 order-2 order-xl-last">
+            <div class="d-flex flex-column">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Kişisel Bilgiler</h5>
+                        
+                        {% if self_profile %}
+                        <a data-bs-target="#editProfileModal" data-bs-toggle="modal" class="fs-14 cursor-pointer"><i class="ri-edit-line me-1"></i>Düzenle</a>
+                        {% endif %}
+                            
+                    </div>
+                    <div class="card-body d-flex flex-column gap-4 text-truncate">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-map-pin-line fs-16 text-muted"></i>
+                            {% if profile.address %}
+                            <p class="mb-0">{{ profile.address.district.name.title }} /
+                                {{ profile.address.city.name.title }}
+                            </p>
+                            {% else %}
+                            <p class="mb-0">Adres bilgisi girilmedi!</p>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-home-4-line fs-16 text-muted"></i>
+                            {% if profile.address %}
+                            <p class="mb-0">{{ profile.address.address_line }}</p>
+                            {% else %}
+                            <p class="mb-0">Adres bilgisi girilmedi!</p>
+                            {% endif %}
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-mail-line fs-16 text-muted"></i>
+                            <p class="mb-0">{{ profile.email }}</p>
+                        </div>
+                        {% if profile.phone %}
+                            <div class="d-flex align-items-center gap-3">
+                                <i class="ri-phone-line fs-16 text-muted"></i>
+                                <p class="mb-0">+90{{ profile.phone }}</p>
+                            </div>
+                        {% endif %}
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-shield-user-line fs-16 text-muted"></i>
+                            <p class="mb-0">{{profile.position}}</p>
+                        </div>
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-user-2-line fs-16 text-muted"></i>
+                            <p class="mb-0">{{profile.get_gender_display}}</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <h5 class="card-title mb-0">Sosyal Hesaplar</h5>
+                        
+                        {% if self_profile %}
+                            <a class="link-primary cursor-pointer" data-bs-toggle="modal" data-bs-target="#socialEditModal"><i class="ri-edit-line me-1"></i>Düzenle</a>
+                        {% endif %}
+                            
+                    </div>
+                    <div class="card-body p-5 flex-wrap overflow-hidden">
+                        <div class="d-flex gap-2">
+                            {% if profile.facebook %}
+                            <a href="{{profile.facebook}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-facebook-fill fs-18"></i>
+                            </a>
+                            {% endif %}
+                            {% if profile.twitter %}
+                            <a href="{{profile.twitter}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-twitter-line fs-18"></i>
+                            </a>
+                            {% endif %}
+                            {% if profile.instagram %}
+                            <a href="{{profile.instagram}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-instagram-line fs-18"></i>
+                            </a>
+                            {% endif %}
+                            {% if profile.youtube %}
+                            <a href="{{profile.youtube}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-youtube-line fs-18"></i>
+                            </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Meslek</h5>
+                        
+                        {% if self_profile %}
+                            <a class="fs-14 cursor-pointer" data-bs-toggle="modal" data-bs-target="#editProfessionModal">
+                                <i class="ri-edit-line me-1"></i>Düzenle
+                            </a>
+                        {% endif %}
+                            
+                    </div>
+                    <div class="card-body d-flex flex-column gap-6">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-briefcase-4-line fs-16 text-muted px-3 py-2 bg-info-subtle rounded"></i>
+                            <div class="">
+                                {% if profile.profession %}
+                                <h6 class="text-muted">{{ profile.profession.name }}</h6>
+                                {% else %}
+                                <h6 class="text-muted">Meslek bilgisi girilmedi!</h6>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0">Üniversite</h5>
+                        
+                        {% if self_profile %}
+                            <a class="fs-14 cursor-pointer" data-bs-toggle="modal" data-bs-target="#editUniversityModal">
+                                <i class="ri-edit-line me-1"></i>Düzenle
+                            </a>
+                        {% endif %}
+                            
+                    </div>
+                    <div class="card-body d-flex flex-column gap-6">
+                        <div class="d-flex align-items-center gap-3">
+                            <i class="ri-school-line fs-16 text-muted px-3 py-2 bg-info-subtle rounded"></i>
+                            <div class="">
+                                {% if profile.university %}
+                                <h6 class="text-muted">{{ profile.university }}</h6>
+                                {% else %}
+                                <h6 class="text-muted">Üniversite bilgisi girilmedi!</h6>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% if self_profile %}
+    <div class="modal fade modal-lg" id="socialEditModal" tabindex="-1" aria-labelledby="socialEditModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" action="{% url 'user-edit-socials' profile.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="socialEditModalLabel">Sosyal Medya Hesapları</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                    </div>
+
+                    <div class="modal-body d-flex flex-column gap-4">
+                        <div class="d-flex gap-3 flex-row">
+                            <a href="{{profile.facebook}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-facebook-fill fs-18"></i>
+                            </a>
+                            <input type="url" name="facebook" class="form-control" placeholder="https://facebook.com/..."
+                                value="{{ profile.facebook }}">
+                        </div>
+
+                        <div class="d-flex gap-3 flex-row">
+                            <a href="{{profile.twitter}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-twitter-line fs-18"></i>
+                            </a>
+                            <input type="url" name="twitter" class="form-control" placeholder="https://x.com/..."
+                                value="{{ profile.twitter }}">
+                        </div>
+
+                        <div class="d-flex gap-3 flex-row">
+                            <a href="{{profile.instagram}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-instagram-line fs-18"></i>
+                            </a>
+                            <input type="url" name="instagram" class="form-control" placeholder="https://instagram.com/..."
+                                value="{{ profile.instagram }}">
+                        </div>
+
+                        <div class="d-flex gap-3 flex-row">
+                            <a href="{{profile.youtube}}" target="_blank" class="btn btn-primary icon-btn rounded">
+                                <i class="ri-youtube-line fs-18"></i>
+                            </a>
+                            <input type="url" name="youtube" class="form-control" placeholder="https://youtube.com/..."
+                                value="{{ profile.youtube }}">
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade modal-lg" id="editResumeModal" tabindex="-1" aria-labelledby="editResumeModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" action="{% url 'user-edit-resume' profile.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editResumeModalLabel">Özgeçmiş</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                    </div>
+
+                    <div class="modal-body ">
+                        <textarea name="resume" id="resume" class="form-control" style="min-height: 35vh !important;"
+                            placeholder="Buraya özgeçmişinizi yazınız">{% if profile.resume %}{{ profile.resume }}{% endif %}</textarea>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade modal-lg" id="editUniversityModal" tabindex="-1" aria-labelledby="editUniversityModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" action="{% url 'user-edit-university' profile.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editUniversityModalLabel">Üniversite</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                    </div>
+
+                    <div class="modal-body ">
+                        <input type="text" name="university" class="form-control" placeholder="Üniversite adını giriniz..."
+                            value="{% if presidency.university %}{{ presidency.university }}{% endif %}">
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade modal-lg" id="editProfessionModal" tabindex="-1" aria-labelledby="editProfessionModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" action="{% url 'user-edit-profession' profile.id %}">
+                    {% csrf_token %}
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="editProfessionModalLabel">Meslek</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                    </div>
+
+                    <div class="modal-body ">
+                        <select id="profession-select" name="profession" class="form-select"
+                            placeholder="Meslek ara veya ekle...">
+                            {% if profile.profession %}
+                            <option value="{{ profile.profession.id }}" selected>
+                                {{ profile.profession.name }}
+                            </option>
+                            {% endif %}
+                        </select>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Vazgeç</button>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                    </div>
+
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="editProfileModal" tabindex="-1">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+
+                <form action="{% url 'user-edit-profile' profile.id %}" method="post">
+                    {% csrf_token %}
+
+                    <div class="modal-header">
+                        <h5 class="modal-title">Profili Düzenle</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label for="first_name" class="form-label">Ad</label>
+                                <input type="text" name="first_name" class="form-control" {% if profile.first_name %}value="{{ profile.first_name }}"{% endif %}>
+                            </div>
+
+                            <div class="col-6">
+                                <label for="last_name"class="form-label">Soyad</label>
+                                <input type="text" name="last_name" class="form-control" {% if profile.last_name %}value="{{ profile.last_name }}"{% endif %}>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+
+                            <div class="col-4">
+                                <label for="phone" class="form-label">Telefon Numarası</label>
+                                <input type="text" name="phone" class="form-control" {% if profile.phone %}value="{{ profile.phone }}"{% endif %}>
+                            </div>
+
+                            <div class="col-4">
+                                <label for="email" class="form-label">E-posta</label>
+                                <input type="email" name="email" class="form-control" {% if profile.email %}value="{{ profile.email }}"{% endif %}>
+                            </div>
+                            
+                            <div class="col-4">
+                                <label for="gender class="form-label">Cinsiyet</label>
+                                <select name="gender" id="gender" class="form-select">
+                                    <option value="">Cinsiyet seçin</option>
+                                    <option value="E" {% if profile.gender == 'E' %}selected{% endif %}>Erkek</option>
+                                    <option value="K" {% if profile.gender == 'K' %}selected{% endif %}>Kadın</option>
+                                </select>
+                            </div>
+
+                        </div>
+
+
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <label for="city" class="form-label">Şehir</label>
+                                <select name="city" class="form-select" hx-get="{% url 'district_by_city' %}"
+                                    hx-target="#district-select" hx-trigger="change" hx-swap="innerHTML">
+                                    <option value="">Şehir seçin</option>
+                                    {% for city in cities %}
+                                    <option value="{{ city.id }}" {% if profile.address.city.id == city.id %}selected{% endif %}>
+                                        {{ city.name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <label for="district" class="form-label">İlçe</label>
+                                <select name="district" id="district-select" class="form-select">
+                                    {% if profile.address.city %}
+                                        <option value="">İlçe seçin</option>
+                                        {% for d in profile.address.city.districts.all %}
+                                        <option {% if d.id == profile.address.district.id %}selected{% endif %} value="{{ d.id }}">{{ d.name }}</option>
+                                        {% endfor %}
+                                    {% else %}
+                                    <option value="">Önce şehir seçin</option>
+                                    {% endif %}
+                                </select>
+                            </div>
+                        </div>
+                    
+                        <!-- Açık Adres -->
+                        <div class="mb-3">
+                            <label for="address_line" class="form-label">Adres</label>
+                            <textarea name="address_line" class="form-control" rows="3" oninput="geocodeAddress()">{{ profile.address.address_line }}</textarea>
+                        </div>
+
+                        <!-- Hidden koordinatlar -->
+                        <input type="hidden" name="latitude" id="lat" value="{{ profile.address.center.latitude }}">
+                        <input type="hidden" name="longitude" id="lng" value="{{ profile.address.center.longitude }}">
+
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                        <button type="submit" class="btn btn-primary">Kaydet</button>
+                    </div>
+
+                </form>
+
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="cropModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Resmi Kırp</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <img id="cropImage" class="img-fluid">
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button class="btn btn-primary" id="cropSaveBtn">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+    
+{% endblock content %}
+
+{% block js %}
+
+
+{% if self_profile %}
+
+<script src="https://cdn.jsdelivr.net/npm/tom-select/dist/js/tom-select.complete.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBEHrVmu7zD2SYlo3tKLlXJVxfNeZLIhDI" async defer></script>
+
+<script>
+function geocodeAddress() {
+    const address = document.querySelector('[name="address_line"]').value;
+    const city = document.querySelector('[name="city"] option:checked')?.text;
+    const district = document.querySelector('[name="district"] option:checked')?.text;
+
+    if (!address || !city) return;
+
+    const fullAddress = `${address} ${district || ""} ${city} Türkiye`;
+
+    const geocoder = new google.maps.Geocoder();
+    geocoder.geocode({ address: fullAddress }, function (results, status) {
+        if (status === "OK") {
+            document.getElementById("lat").value =
+                results[0].geometry.location.lat();
+            document.getElementById("lng").value =
+                results[0].geometry.location.lng();
+        }
+    });
+}
+</script>
+
+<script>
+
+new TomSelect("#profession-select", {
+    valueField: "value",
+    labelField: "text",
+    searchField: "text",
+    create: function (input) {
+        return {
+            value: input,
+            text: input
+        };
+    },
+    load: function (query, callback) {
+        if (!query.length) return callback();
+
+        fetch("{% url 'professions_options' %}?q=" + encodeURIComponent(query))
+            .then(response => response.json())
+            .then(data => callback(data))
+            .catch(() => callback());
+    },
+    render: {
+        option_create: function (data, escape) {
+            return `
+            <div class="create">
+                <i class="ri-add-line me-1"></i>
+                <strong>${escape(data.input)}</strong> ekle
+            </div>
+        `;
+        }
+    }
+});
+</script>
+
+{% if self_profile %}
+  <script>
+    document.querySelector("#password_form").addEventListener("submit", function(e){
+        const newPass = document.getElementById("new_password");
+        const confirmPass = document.getElementById("confirm_password");
+
+        if(newPass.value !== confirmPass.value){
+            e.preventDefault();
+
+            newPass.classList.add("is-invalid");
+            confirmPass.classList.add("is-invalid");
+        }else{
+            newPass.classList.remove("is-invalid");
+            confirmPass.classList.remove("is-invalid");
+        }
+    });
+
+    document.querySelectorAll(".toggle-password").forEach(function(button){
+        button.addEventListener("click", function(){
+
+            const input = document.getElementById(this.dataset.target);
+            const icon = this.querySelector("i");
+
+            if(input.type === "password"){
+                input.type = "text";
+                icon.classList.remove("bi-eye");
+                icon.classList.add("bi-eye-slash");
+            }else{
+                input.type = "password";
+                icon.classList.remove("bi-eye-slash");
+                icon.classList.add("bi-eye");
+            }
+
+        });
+    });
+    </script>
+{% endif %}
+
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+let cropper;
+let imageData;
+const cameraBtn = document.getElementById('cameraBtn');
+const imageInput = document.getElementById('imageInput');
+const cropImage = document.getElementById('cropImage');
+const cropModalEl = document.getElementById('cropModal');
+const cropModal = new bootstrap.Modal(cropModalEl);
+
+cameraBtn.addEventListener('click', () => {
+    imageInput.click();
+});
+
+imageInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        imageData = reader.result;
+        cropImage.src = imageData;
+        cropModal.show();
+    };
+    reader.readAsDataURL(file);
+});
+
+cropModalEl.addEventListener('shown.bs.modal', () => {
+
+    if (cropper) {
+        cropper.destroy();
+    }
+
+    cropper = new Cropper(cropImage, {
+        aspectRatio: 1,
+        viewMode: 1,
+        autoCropArea: 1,
+        movable: true,
+        zoomable: true,
+        scalable: false,
+    });
+
+});
+
+function toTitle(str = "") {
+  if (typeof str !== "string") return "";
+
+  return str
+    .trim()
+    .split(/\s+/)
+    .map(word =>
+      word.charAt(0).toLocaleUpperCase("tr-TR") +
+      word.slice(1).toLocaleLowerCase("tr-TR")
+    )
+    .join(" ");
+}
+const formatName = (name) => {
+    if (!name) return '';
+
+    const words = name.split(' ');
+    if (words.length === 1) {
+        return toTitle(name);
+    } else {
+        const firstName = words[0].toLowerCase();
+        const restNames = words.slice(1).map(word => toTitle(word)).join('');
+        return firstName + restNames;
+    }
+}
+
+const generateShortId = () => {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2, 6);
+}
+
+document.getElementById('cropSaveBtn').addEventListener('click', () => {
+    cropper.getCroppedCanvas({
+        width: 600,
+        height: 600,
+        imageSmoothingQuality: 'high'
+    }).toBlob((blob) => {
+
+        const formData = new FormData();
+        const firstName = "{{ profile.first_name }}";
+        const lastName = "{{ profile.first_name }}";
+
+
+        formData.append('image', blob, formatName(firstName) + formatName(lastName) + "Profile" + generateShortId()+".jpg");
+
+        fetch("{% url 'user-edit-image' profile.id %}", {
+            method: "POST",
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            body: formData
+        }).then(res => {
+            if (res.redirected) {
+                window.location.href = res.url;
+            } else {
+                location.reload();
+            }
+        });
+
+    });
+
+    cropModal.hide();
+});
+
+});
+</script>
+    
+{% endif %}
+
+
+
+{% endblock js %}

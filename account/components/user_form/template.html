@@ -1,0 +1,76 @@
+{# components/user_form/template.html #}
+
+{% load component_tags %}
+
+{% if is_modal %}
+<div class="modal fade" id="{{ form_name }}" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+{% else %}
+<div class="card"><div class="card-body">
+{% endif %}
+
+<form method="post" action="{{ action_url }}" enctype="multipart/form-data" id="{{ form_name }}_{{ prefix }}">
+    <div class="modal-header bg-primary-subtle text-primary">
+        <h5 class="modal-title">Kullanıcı Bilgileri</h5>
+        {% if is_modal %}
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        {% endif %}
+    </div>
+
+    <div class="modal-body">
+
+        <!-- IMAGE -->
+        <div class="mb-4 text-center">
+            <img id="preview_{{ prefix }}" src="{{ default_image }}" class="rounded-circle" width="150">
+            <input type="file" name="image" id="image_{{ prefix }}" class="d-none">
+            <input type="hidden" name="image-clear" id="imageClear_{{ prefix }}">
+        </div>
+
+        <!-- FIELDS -->
+        <div class="mb-3">
+            {{ form.first_name.label_tag }}
+            {{ form.first_name }}
+            {{ form.first_name.errors }}
+        </div>
+
+        <div class="mb-3">
+            {{ form.last_name.label_tag }}
+            {{ form.last_name }}
+            {{ form.last_name.errors }}
+        </div>
+
+        <div class="mb-3">
+            {{ form.email.label_tag }}
+            {{ form.email }}
+            <div id="emailFeedback_{{ prefix }}"></div>
+            {{ form.email.errors }}
+        </div>
+
+        <div class="mb-3">
+            {{ form.phone.label_tag }}
+            {{ form.phone }}
+            <div id="phoneFeedback_{{ prefix }}"></div>
+            {{ form.phone.errors }}
+        </div>
+
+    </div>
+
+    <div class="modal-footer">
+        {% if is_modal %}
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+        {% endif %}
+        <button type="submit" class="btn btn-primary">Kaydet</button>
+    </div>
+</form>
+
+{% if is_modal %}
+        </div>
+    </div>
+</div>
+{% else %}
+</div></div>
+{% endif %}
+
+<link rel="stylesheet" href="{% component_css_dependencies %}">
+<script src="{% component_js_dependencies %}"></script>
