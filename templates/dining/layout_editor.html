@@ -1,0 +1,474 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title=room.name|add:" — Salon Düzeni" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .floor-toolbar .form-control, .floor-toolbar .form-select { max-width: 110px; }
+    .palette-shape {
+        display: flex; flex-direction: column; align-items: center; gap: .25rem;
+        border: 1px solid var(--bs-border-color); border-radius: .5rem;
+        padding: .5rem .75rem; cursor: pointer; background: var(--bs-body-bg);
+        min-width: 78px; transition: border-color .15s, transform .1s;
+    }
+    .palette-shape:hover { border-color: var(--pe-primary, #0d6efd); transform: translateY(-1px); }
+    .palette-shape.active { border-color: var(--pe-primary, #0d6efd); box-shadow: 0 0 0 2px rgba(13,110,253,.15); }
+    .palette-shape .swatch { width: 30px; height: 30px; background: var(--bs-secondary-bg); border: 2px solid var(--bs-secondary); }
+    .palette-shape .swatch.square { border-radius: 4px; }
+    .palette-shape .swatch.round { border-radius: 50%; }
+    .palette-shape .swatch.rectangle { width: 40px; height: 24px; border-radius: 4px; }
+
+    .floor-canvas-wrap {
+        overflow: auto; border: 1px solid var(--bs-border-color);
+        border-radius: .6rem; background: #f4f5f7; max-height: 74vh;
+    }
+    .floor-canvas {
+        position: relative; margin: 0; background-color: #fff;
+        background-image:
+            linear-gradient(rgba(0,0,0,.05) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,0,0,.05) 1px, transparent 1px);
+        background-size: 25px 25px;
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,.04);
+    }
+    .floor-canvas.placing { cursor: crosshair; }
+
+    .floor-table {
+        position: absolute; box-sizing: border-box;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        border: 2px solid; border-radius: .35rem;
+        font-size: .72rem; line-height: 1.1; text-align: center; padding: 2px;
+        cursor: move; user-select: none; overflow: hidden;
+        transition: box-shadow .1s;
+    }
+    .floor-table.is-round { border-radius: 50%; }
+    .floor-table.selected { outline: 2px dashed var(--pe-primary, #0d6efd); outline-offset: 2px; z-index: 5; }
+    .floor-table .ft-name { font-weight: 700; }
+    .floor-table .ft-cap { opacity: .85; }
+    .resize-handle {
+        position: absolute; right: -7px; bottom: -7px; width: 15px; height: 15px;
+        background: var(--pe-primary, #0d6efd); border: 2px solid #fff; border-radius: 3px;
+        cursor: nwse-resize; z-index: 6;
+    }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "tables" "add" as can_add_tables %}
+{% has_ext_perm user "tables" "change" as can_change_tables %}
+{% has_ext_perm user "tables" "delete" as can_delete_tables %}
+
+{% with title_sub="Masa & Salon Yönetimi" title=room.name %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <a href="{% url 'tables' %}" class="btn btn-sm btn-light"><i class="ri-arrow-left-line me-1"></i> Salon Listesi</a>
+    {% if can_change_tables %}
+    <button type="button" class="btn btn-primary" id="saveLayoutBtn"><i class="ri-save-line me-1"></i> Düzeni Kaydet</button>
+    {% endif %}
+</div>
+
+<div class="row g-3">
+    <!-- Canvas -->
+    <div class="col-12 col-xl-9">
+        <div class="card">
+            <div class="card-header floor-toolbar d-flex flex-wrap align-items-center gap-3">
+                {% if can_change_tables %}
+                <div class="d-flex align-items-center gap-2">
+                    <label class="form-label mb-0 fs-13">Kanvas:</label>
+                    <input type="number" id="canvasW" class="form-control form-control-sm" value="{{ room.canvas_width }}" min="200" step="25">
+                    <span class="text-muted">×</span>
+                    <input type="number" id="canvasH" class="form-control form-control-sm" value="{{ room.canvas_height }}" min="200" step="25">
+                    <span class="text-muted fs-12">px</span>
+                </div>
+                {% endif %}
+
+                {% if can_add_tables and can_change_tables %}
+                <div class="vr d-none d-md-block"></div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fs-13 text-muted">Ekle:</span>
+                    {% for value, label in shape_choices %}
+                    <div class="palette-shape" data-shape="{{ value }}" title="{{ label }} masa ekle">
+                        <span class="swatch {{ value }}"></span>
+                        <small>{{ label }}</small>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <div class="ms-auto d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center gap-1"><span class="legend-dot bg-success"></span><small class="text-muted">Boş</small></div>
+                    <div class="d-flex align-items-center gap-1"><span class="legend-dot bg-danger"></span><small class="text-muted">Dolu</small></div>
+                    <div class="d-flex align-items-center gap-1"><span class="legend-dot bg-warning"></span><small class="text-muted">Rezerve</small></div>
+                    <div class="d-flex align-items-center gap-1"><span class="legend-dot bg-secondary"></span><small class="text-muted">Dışı</small></div>
+                </div>
+            </div>
+            <div class="card-body p-2">
+                {% if can_add_tables and can_change_tables %}
+                <p class="text-muted fs-12 mb-2 px-1">
+                    <i class="ri-information-line me-1"></i>
+                    Bir şekil seçip kanvasa tıklayarak masa ekleyin. Masaları sürükleyerek taşıyın,
+                    seçiliyken köşeden boyutlandırın.
+                </p>
+                {% endif %}
+                <div class="floor-canvas-wrap">
+                    <div class="floor-canvas" id="floorCanvas"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Properties -->
+    <div class="col-12 col-xl-3">
+        <div class="card">
+            <div class="card-header"><h5 class="card-title mb-0">Masa Özellikleri</h5></div>
+            <div class="card-body">
+                <div id="panelHint" class="text-muted text-center py-4">
+                    <i class="ri-cursor-line fs-3 d-block mb-2"></i>
+                    Düzenlemek için bir masa seçin.
+                </div>
+
+                <div id="panelForm" class="d-none">
+                    <div class="mb-3">
+                        <label class="form-label">Masa Adı / No</label>
+                        <input type="text" id="pName" class="form-control" {% if not can_change_tables %}disabled{% endif %}>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Kapasite</label>
+                            <input type="number" id="pCapacity" class="form-control" min="1" {% if not can_change_tables %}disabled{% endif %}>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Şekil</label>
+                            <select id="pShape" class="form-select" {% if not can_change_tables %}disabled{% endif %}>
+                                {% for value, label in shape_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Durum</label>
+                        <select id="pStatus" class="form-select" {% if not can_change_tables %}disabled{% endif %}>
+                            {% for value, label in status_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="form-label">Genişlik</label>
+                            <input type="number" id="pWidth" class="form-control" min="20" {% if not can_change_tables %}disabled{% endif %}>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Yükseklik</label>
+                            <input type="number" id="pHeight" class="form-control" min="20" {% if not can_change_tables %}disabled{% endif %}>
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Açı</label>
+                            <input type="number" id="pRotation" class="form-control" step="15" {% if not can_change_tables %}disabled{% endif %}>
+                        </div>
+                    </div>
+                    {% if can_delete_tables %}
+                    <button type="button" id="pDelete" class="btn btn-outline-danger w-100">
+                        <i class="ri-delete-bin-5-line me-1"></i> Masayı Sil
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden save form -->
+{% if can_change_tables %}
+<form method="post" action="{% url 'room-save-layout' room.id %}" id="saveLayoutForm" class="d-none">
+    {% csrf_token %}
+    <input type="hidden" name="layout" id="layoutInput">
+</form>
+{% endif %}
+
+{% endblock content %}
+
+{% block js %}
+{% has_ext_perm user "tables" "add" as can_add_tables %}
+{% has_ext_perm user "tables" "change" as can_change_tables %}
+{% has_ext_perm user "tables" "delete" as can_delete_tables %}
+{{ tables_json|json_script:"layout-data" }}
+<script>
+(function () {
+    "use strict";
+
+    var CAN_EDIT   = {{ can_change_tables|yesno:"true,false" }};
+    var CAN_ADD    = {{ can_add_tables|yesno:"true,false" }};
+    var CAN_DELETE = {{ can_delete_tables|yesno:"true,false" }};
+
+    var COLORS = { empty: 'success', occupied: 'danger', reserved: 'warning', disabled: 'secondary' };
+    var DEFAULT_SIZE = { square: [150, 150], round: [150, 150], rectangle: [120, 70] };
+    var MIN = 20;
+
+    var canvas = document.getElementById('floorCanvas');
+    var wrap = canvas.parentElement;
+    var wInput = document.getElementById('canvasW');
+    var hInput = document.getElementById('canvasH');
+
+    var initial = JSON.parse(document.getElementById('layout-data').textContent || '[]');
+    var uidSeq = 1;
+    var tables = initial.map(function (t) {
+        return {
+            uid: uidSeq++, id: t.id || null, name: t.name,
+            capacity: t.capacity, status: t.status, shape: t.shape,
+            pos_x: t.pos_x, pos_y: t.pos_y,
+            width: t.width, height: t.height, rotation: t.rotation || 0
+        };
+    });
+
+    var canvasW = parseInt((wInput && wInput.value) || '{{ room.canvas_width }}', 10);
+    var canvasH = parseInt((hInput && hInput.value) || '{{ room.canvas_height }}', 10);
+    var selectedUid = null;
+    var placingShape = null;
+
+    function byUid(uid) { for (var i = 0; i < tables.length; i++) if (tables[i].uid === uid) return tables[i]; return null; }
+    function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+    function clamp(v, min, max) { return Math.max(min, Math.min(v, max)); }
+
+    function clampTable(t) {
+        t.width = clamp(t.width, MIN, canvasW);
+        t.height = clamp(t.height, MIN, canvasH);
+        t.pos_x = clamp(t.pos_x, 0, Math.max(0, canvasW - t.width));
+        t.pos_y = clamp(t.pos_y, 0, Math.max(0, canvasH - t.height));
+    }
+
+    function render() {
+        canvas.style.width = canvasW + 'px';
+        canvas.style.height = canvasH + 'px';
+        canvas.innerHTML = '';
+        tables.forEach(function (t) {
+            clampTable(t);
+            var color = COLORS[t.status] || 'secondary';
+            var el = document.createElement('div');
+            el.className = 'floor-table bg-' + color + '-subtle border-' + color + (t.shape === 'round' ? ' is-round' : '');
+            el.dataset.uid = t.uid;
+            el.style.left = t.pos_x + 'px';
+            el.style.top = t.pos_y + 'px';
+            el.style.width = t.width + 'px';
+            el.style.height = t.height + 'px';
+            if (t.rotation) el.style.transform = 'rotate(' + t.rotation + 'deg)';
+            el.classList.add('text-' + color);
+            el.innerHTML = '<span class="ft-name">' + esc(t.name) + '</span>' +
+                           '<span class="ft-cap">' + t.capacity + ' \u00B7 ' + t.width + '×' + t.height + '</span>';
+            if (t.uid === selectedUid) {
+                el.classList.add('selected');
+                if (CAN_EDIT) {
+                    var h = document.createElement('div');
+                    h.className = 'resize-handle';
+                    h.dataset.role = 'resize';
+                    el.appendChild(h);
+                }
+            }
+            canvas.appendChild(el);
+        });
+        updatePanel();
+    }
+
+    // ---- Property panel -----------------------------------------------------
+    var hint = document.getElementById('panelHint');
+    var form = document.getElementById('panelForm');
+    var fName = document.getElementById('pName');
+    var fCap = document.getElementById('pCapacity');
+    var fShape = document.getElementById('pShape');
+    var fStatus = document.getElementById('pStatus');
+    var fW = document.getElementById('pWidth');
+    var fH = document.getElementById('pHeight');
+    var fRot = document.getElementById('pRotation');
+
+    function updatePanel() {
+        var t = selectedUid ? byUid(selectedUid) : null;
+        if (!t) { hint.classList.remove('d-none'); form.classList.add('d-none'); return; }
+        hint.classList.add('d-none'); form.classList.remove('d-none');
+        fName.value = t.name; fCap.value = t.capacity; fShape.value = t.shape;
+        fStatus.value = t.status; fW.value = t.width; fH.value = t.height; fRot.value = t.rotation;
+    }
+
+    function bindPanel() {
+        if (!CAN_EDIT) return;
+        function commit() {
+            var t = byUid(selectedUid); if (!t) return;
+            t.name = fName.value;
+            t.capacity = Math.max(1, parseInt(fCap.value, 10) || 1);
+            t.shape = fShape.value;
+            t.status = fStatus.value;
+            t.width = Math.max(MIN, parseInt(fW.value, 10) || MIN);
+            t.height = Math.max(MIN, parseInt(fH.value, 10) || MIN);
+            t.rotation = (parseInt(fRot.value, 10) || 0) % 360;
+            render();
+        }
+        [fName, fCap, fShape, fStatus, fW, fH, fRot].forEach(function (el) {
+            el.addEventListener('change', commit);
+        });
+        var del = document.getElementById('pDelete');
+        if (del) del.addEventListener('click', function () {
+            tables = tables.filter(function (x) { return x.uid !== selectedUid; });
+            selectedUid = null; render();
+        });
+    }
+
+    // ---- Placement ----------------------------------------------------------
+    function nextName() {
+        var n = tables.length + 1;
+        var taken = {};
+        tables.forEach(function (t) { taken[t.name.toLowerCase()] = true; });
+        while (taken[('masa ' + n).toLowerCase()]) n++;
+        return 'Masa ' + n;
+    }
+
+    function placeTable(shape, x, y) {
+        var size = DEFAULT_SIZE[shape] || [150, 150];
+        var t = {
+            uid: uidSeq++, id: null, name: nextName(), capacity: 4,
+            status: 'empty', shape: shape,
+            pos_x: clamp(x - size[0] / 2, 0, canvasW - size[0]),
+            pos_y: clamp(y - size[1] / 2, 0, canvasH - size[1]),
+            width: size[0], height: size[1], rotation: 0
+        };
+        tables.push(t);
+        selectedUid = t.uid;
+        render();
+    }
+
+    if (CAN_ADD && CAN_EDIT) {
+        document.querySelectorAll('.palette-shape').forEach(function (p) {
+            p.addEventListener('click', function () {
+                if (placingShape === p.dataset.shape) {
+                    placingShape = null; p.classList.remove('active'); canvas.classList.remove('placing');
+                } else {
+                    placingShape = p.dataset.shape;
+                    document.querySelectorAll('.palette-shape').forEach(function (x) { x.classList.remove('active'); });
+                    p.classList.add('active'); canvas.classList.add('placing');
+                }
+            });
+        });
+    }
+
+    // ---- Drag / resize / select --------------------------------------------
+    var drag = null; // {uid, mode, startX, startY, ox, oy, ow, oh}
+
+    function pointerPos(e) {
+        var r = canvas.getBoundingClientRect();
+        return { x: e.clientX - r.left, y: e.clientY - r.top };
+    }
+
+    canvas.addEventListener('pointerdown', function (e) {
+        var p = pointerPos(e);
+
+        if (placingShape) {
+            placeTable(placingShape, p.x, p.y);
+            placingShape = null;
+            document.querySelectorAll('.palette-shape').forEach(function (x) { x.classList.remove('active'); });
+            canvas.classList.remove('placing');
+            return;
+        }
+
+        var el = e.target.closest('.floor-table');
+        if (!el) { selectedUid = null; render(); return; }
+
+        var uid = parseInt(el.dataset.uid, 10);
+        selectedUid = uid;
+        var t = byUid(uid);
+        if (!t) return;
+
+        if (!CAN_EDIT) { render(); return; }
+
+        var resizing = e.target.dataset.role === 'resize';
+        drag = {
+            uid: uid, mode: resizing ? 'resize' : 'move',
+            startX: p.x, startY: p.y,
+            ox: t.pos_x, oy: t.pos_y, ow: t.width, oh: t.height
+        };
+        canvas.setPointerCapture(e.pointerId);
+        render();
+        e.preventDefault();
+    });
+
+    canvas.addEventListener('pointermove', function (e) {
+        if (!drag) return;
+        var p = pointerPos(e);
+        var t = byUid(drag.uid); if (!t) return;
+        var dx = p.x - drag.startX, dy = p.y - drag.startY;
+
+        if (drag.mode === 'move') {
+            t.pos_x = clamp(drag.ox + dx, 0, canvasW - t.width);
+            t.pos_y = clamp(drag.oy + dy, 0, canvasH - t.height);
+        } else {
+            t.width = clamp(drag.ow + dx, MIN, canvasW - t.pos_x);
+            t.height = clamp(drag.oh + dy, MIN, canvasH - t.pos_y);
+        }
+        // live update without full re-render
+        var el = canvas.querySelector('.floor-table[data-uid="' + drag.uid + '"]');
+        if (el) {
+            el.style.left = t.pos_x + 'px'; el.style.top = t.pos_y + 'px';
+            el.style.width = t.width + 'px'; el.style.height = t.height + 'px';
+        }
+    });
+
+    function endDrag(e) {
+        if (!drag) return;
+        try { canvas.releasePointerCapture(e.pointerId); } catch (_) {}
+        drag = null;
+        render();
+    }
+    canvas.addEventListener('pointerup', endDrag);
+    canvas.addEventListener('pointercancel', endDrag);
+
+    // ---- Canvas resize ------------------------------------------------------
+    if (CAN_EDIT) {
+        function applyCanvasSize() {
+            canvasW = Math.max(200, parseInt(wInput.value, 10) || 200);
+            canvasH = Math.max(200, parseInt(hInput.value, 10) || 200);
+            render();
+        }
+        wInput.addEventListener('change', applyCanvasSize);
+        hInput.addEventListener('change', applyCanvasSize);
+    }
+
+    // ---- Save ---------------------------------------------------------------
+    var saveBtn = document.getElementById('saveLayoutBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            for (var i = 0; i < tables.length; i++) {
+                if (!tables[i].name || !tables[i].name.trim()) {
+                    alert('Tüm masaların bir adı olmalıdır.');
+                    return;
+                }
+            }
+            var payload = {
+                canvas_width: canvasW, canvas_height: canvasH,
+                tables: tables.map(function (t) {
+                    return {
+                        id: t.id, name: t.name.trim(), capacity: t.capacity,
+                        status: t.status, shape: t.shape,
+                        pos_x: Math.round(t.pos_x), pos_y: Math.round(t.pos_y),
+                        width: t.width, height: t.height, rotation: t.rotation
+                    };
+                })
+            };
+            document.getElementById('layoutInput').value = JSON.stringify(payload);
+            document.getElementById('saveLayoutForm').submit();
+        });
+    }
+
+    bindPanel();
+    render();
+})();
+</script>
+{% endblock js %}   

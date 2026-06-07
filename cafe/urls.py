@@ -13,6 +13,7 @@ urlpatterns = [
     path('error/', error_page_renderer, name='error_page'),
     path('', include('account.urls')),
     path('', include('settings.urls')),
+    path('', include('dining.urls')),
 ]
 
 # sadece development ortamı için

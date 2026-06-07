@@ -1,0 +1,410 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Masa & Salon Yönetimi" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .tables-grid > .col { min-width: 0; }            /* flex çocuklarının daralabilmesi için */
+
+    .table-tile {
+        position: relative;
+        border: 1px solid var(--bs-border-color);
+        border-radius: .6rem;
+        padding: .85rem .85rem .85rem 1rem;
+        min-width: 0;
+        overflow: hidden;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .table-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+    .table-tile::before {
+        content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+        background: var(--bs-secondary);
+    }
+    .table-tile[data-status="empty"]::before    { background: var(--bs-success); }
+    .table-tile[data-status="occupied"]::before  { background: var(--bs-danger); }
+    .table-tile[data-status="reserved"]::before  { background: var(--bs-warning); }
+    .table-tile[data-status="disabled"]::before  { background: var(--bs-secondary); }
+
+    .table-tile .tile-name { min-width: 0; }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "tables" "add" as can_add_tables %}
+{% has_ext_perm user "tables" "change" as can_change_tables %}
+{% has_ext_perm user "tables" "delete" as can_delete_tables %}
+
+{% with title_sub="Anasayfa" title="Masa & Salon Yönetimi" %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<!-- Toolbar -->
+<div class="card mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <span class="badge bg-primary-subtle text-primary fs-13">{{ rooms.count }} Salon</span>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-success"></span><small class="text-muted">Boş</small></div>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-danger"></span><small class="text-muted">Dolu</small></div>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-warning"></span><small class="text-muted">Rezerve</small></div>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-secondary"></span><small class="text-muted">Kullanım Dışı</small></div>
+        </div>
+        {% if can_add_tables %}
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRoomModal">
+            <i class="ri-add-line me-1"></i> Yeni Salon
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+{% for room in rooms %}
+<div class="card">
+    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div>
+            <h5 class="card-title mb-1">
+                {{ room.name }}
+                {% if not room.is_active %}<span class="badge bg-secondary ms-2">Pasif</span>{% endif %}
+            </h5>
+            <small class="text-muted">{{ room.table_count }} masa &middot; {{ room.total_capacity }} kişilik</small>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{% url 'room_layout' room.id %}" class="btn btn-sm btn-outline-primary" title="Kuş bakışı yerleşim">
+                <i class="ri-layout-grid-line me-1"></i> Düzen
+            </a>
+            {% if can_add_tables %}
+            <button type="button" class="btn btn-sm btn-primary add-table-btn"
+                    data-room-id="{{ room.id }}"
+                    data-bs-toggle="modal" data-bs-target="#addTableModal">
+                <i class="ri-add-line me-1"></i> Masa Ekle
+            </button>
+            {% endif %}
+            {% if can_change_tables %}
+            <button type="button" class="btn btn-sm btn-outline-secondary edit-room-btn"
+                    data-action="{% url 'room-update-room' room.id %}"
+                    data-name="{{ room.name }}"
+                    data-description="{{ room.description|default:'' }}"
+                    data-list_index="{{ room.list_index }}"
+                    data-is_active="{{ room.is_active|yesno:'1,0' }}"
+                    data-bs-toggle="modal" data-bs-target="#editRoomModal">
+                <i class="ri-edit-line"></i>
+            </button>
+            {% endif %}
+            {% if can_delete_tables %}
+            <form method="post" action="{% url 'room-delete-room' room.id %}"
+                  onsubmit="return confirm('“{{ room.name }}” salonunu ve içindeki tüm masaları silmek istediğinize emin misiniz?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card-body">
+        {% if room.tables.all %}
+        <div class="row row-cols-2 row-cols-md-3 row-cols-xxl-4 g-3 tables-grid">
+            {% for table in room.tables.all %}
+            <div class="col">
+                <div class="table-tile h-100 d-flex flex-column" data-status="{{ table.status }}">
+                    <div class="d-flex align-items-center justify-content-between gap-2">
+                        <span class="tile-name d-inline-flex align-items-center gap-2 text-truncate">
+                            <span class="status-dot bg-{{ table.status_color }}"></span>
+                            <span class="fw-semibold text-truncate">{{ table.name }}</span>
+                        </span>
+                        <span class="badge bg-{{ table.status_color }}-subtle text-{{ table.status_color }} flex-shrink-0">{{ table.get_status_display }}</span>
+                    </div>
+
+                    <div class="text-muted fs-12 mt-1 text-truncate">
+                        <i class="ri-group-line me-1"></i>{{ table.capacity }} kişilik &middot; {{ table.get_shape_display }}
+                    </div>
+
+                    {% if can_change_tables %}
+                    <form method="post" action="{% url 'table-set-status' table.id %}" class="mt-2">
+                        {% csrf_token %}
+                        <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                            {% for value, label in status_choices %}
+                            <option value="{{ value }}" {% if table.status == value %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </form>
+                    {% endif %}
+
+                    <div class="d-flex gap-1 mt-2">
+                        {% if can_change_tables %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary flex-grow-1 edit-table-btn"
+                                data-action="{% url 'table-update-table' table.id %}"
+                                data-room="{{ table.room_id }}"
+                                data-name="{{ table.name }}"
+                                data-capacity="{{ table.capacity }}"
+                                data-status="{{ table.status }}"
+                                data-shape="{{ table.shape }}"
+                                data-bs-toggle="modal" data-bs-target="#editTableModal">
+                            <i class="ri-edit-line"></i>
+                        </button>
+                        {% endif %}
+                        {% if can_delete_tables %}
+                        <form method="post" action="{% url 'table-delete-table' table.id %}"
+                              onsubmit="return confirm('“{{ table.name }}” masasını silmek istediğinize emin misiniz?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-light text-center border mb-0">Bu salonda henüz masa yok.</div>
+        {% endif %}
+    </div>
+</div>
+{% empty %}
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="ri-store-2-line fs-1 text-muted d-block mb-3"></i>
+        <h5 class="text-muted">Henüz salon tanımlanmamış</h5>
+        {% if can_add_tables %}
+        <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#addRoomModal">
+            <i class="ri-add-line me-1"></i> İlk Salonu Oluştur
+        </button>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+
+
+{% if can_add_tables %}
+<!-- Add Room Modal -->
+<div class="modal fade" id="addRoomModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'room-create-room' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Yeni Salon</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Salon Adı *</label>
+                        <input type="text" name="name" class="form-control" placeholder="örn. İç Salon, Bahçe" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Açıklama</label>
+                        <textarea name="description" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">Sıralama</label>
+                        <input type="number" step="any" name="list_index" class="form-control" value="0">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Table Modal -->
+<div class="modal fade" id="addTableModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'table-create-table' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Yeni Masa</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Salon *</label>
+                        <select name="room" id="addTableRoom" class="form-select" required>
+                            {% for room in rooms %}
+                            <option value="{{ room.id }}">{{ room.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label">Masa Adı / No *</label>
+                            <input type="text" name="name" class="form-control" placeholder="örn. Masa 1" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Kapasite</label>
+                            <input type="number" name="capacity" class="form-control" value="4" min="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Şekil</label>
+                            <select name="shape" class="form-select">
+                                {% for value, label in shape_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Durum</label>
+                            <select name="status" class="form-select">
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if can_change_tables %}
+<!-- Edit Room Modal -->
+<div class="modal fade" id="editRoomModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" id="editRoomForm">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Salonu Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Salon Adı *</label>
+                        <input type="text" name="name" id="editRoomName" class="form-control" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Açıklama</label>
+                        <textarea name="description" id="editRoomDescription" class="form-control" rows="2"></textarea>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Sıralama</label>
+                            <input type="number" step="any" name="list_index" id="editRoomIndex" class="form-control">
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_active" value="1" id="editRoomActive">
+                                <label class="form-check-label" for="editRoomActive">Aktif</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Table Modal -->
+<div class="modal fade" id="editTableModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" id="editTableForm">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Masayı Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Salon *</label>
+                        <select name="room" id="editTableRoom" class="form-select" required>
+                            {% for room in rooms %}
+                            <option value="{{ room.id }}">{{ room.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-md-7">
+                            <label class="form-label">Masa Adı / No *</label>
+                            <input type="text" name="name" id="editTableName" class="form-control" required>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">Kapasite</label>
+                            <input type="number" name="capacity" id="editTableCapacity" class="form-control" min="1">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Şekil</label>
+                            <select name="shape" id="editTableShape" class="form-select">
+                                {% for value, label in shape_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Durum</label>
+                            <select name="status" id="editTableStatus" class="form-select">
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock content %}
+
+{% block js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.add-table-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var select = document.getElementById('addTableRoom');
+            if (select) select.value = this.dataset.roomId;
+        });
+    });
+
+    document.querySelectorAll('.edit-room-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var d = this.dataset;
+            document.getElementById('editRoomForm').action = d.action;
+            document.getElementById('editRoomName').value = d.name || '';
+            document.getElementById('editRoomDescription').value = d.description || '';
+            document.getElementById('editRoomIndex').value = d.list_index || 0;
+            document.getElementById('editRoomActive').checked = d.is_active === '1';
+        });
+    });
+
+    document.querySelectorAll('.edit-table-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var d = this.dataset;
+            document.getElementById('editTableForm').action = d.action;
+            document.getElementById('editTableRoom').value = d.room;
+            document.getElementById('editTableName').value = d.name || '';
+            document.getElementById('editTableCapacity').value = d.capacity || 1;
+            document.getElementById('editTableShape').value = d.shape;
+            document.getElementById('editTableStatus').value = d.status;
+        });
+    });
+});
+</script>
+{% endblock js %}
