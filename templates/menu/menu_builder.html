@@ -1,0 +1,98 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+{% load currency %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title=menu.name|add:" — Menü İçeriği" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .pick-row { border: 1px solid var(--bs-border-color); border-radius: .5rem; transition: border-color .15s, background .15s; }
+    .pick-row.is-selected { border-color: var(--pe-primary, #0d6efd); background: var(--bs-primary-bg-subtle); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "menu" "change" as can_change_menu %}
+
+{% with title_sub="Ürün & Menü Yönetimi" title=menu.name %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <a href="{% url 'menu_management' %}" class="btn btn-sm btn-light"><i class="ri-arrow-left-line me-1"></i> Menü Listesi</a>
+    {% if can_change_menu %}
+    <button type="submit" form="menuItemsForm" class="btn btn-primary"><i class="ri-save-line me-1"></i> İçeriği Kaydet</button>
+    {% endif %}
+</div>
+
+<p class="text-muted">Bu menüde gösterilecek ürünleri işaretleyin. Her ürün, listede kendi fiyatıyla yer alır.</p>
+
+<form method="post" action="{% url 'menu-save-items' menu.id %}" id="menuItemsForm">
+    {% csrf_token %}
+
+    {% if menu.description %}
+    <div class="alert alert-light border">{{ menu.description }}</div>
+    {% endif %}
+
+    {% for category in categories %}
+    <div class="card border">
+        <div class="card-header d-flex align-items-center justify-content-between">
+            <h6 class="mb-0">{{ category.name }}</h6>
+            <small class="text-muted">{{ category.product_count }} ürün</small>
+        </div>
+        <div class="card-body">
+            {% if category.products.all %}
+            <div class="d-flex flex-column gap-2">
+                {% for product in category.products.all %}
+                <div class="pick-row p-3 d-flex flex-wrap align-items-center gap-3 {% if product.id in selected_ids %}is-selected{% endif %}">
+                    <div class="form-check m-0">
+                        <input class="form-check-input pick-check" type="checkbox"
+                               name="selected_products" value="{{ product.id }}"
+                               id="pick_{{ product.id }}"
+                               {% if product.id in selected_ids %}checked{% endif %}
+                               {% if not can_change_menu %}disabled{% endif %}>
+                    </div>
+                    <label for="pick_{{ product.id }}" class="flex-grow-1 mb-0" style="cursor:pointer;">
+                        <span class="fw-semibold">{{ product.name }}</span>
+                        <span class="text-muted ms-2">{{ product.price|tl_format }}</span>
+                        {% if not product.is_available %}<span class="badge bg-warning-subtle text-warning ms-2">Tükendi</span>{% endif %}
+                        {% if not product.is_active %}<span class="badge bg-secondary-subtle text-secondary ms-2">Pasif</span>{% endif %}
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="alert alert-light text-center border mb-0">Bu kategoride ürün yok.</div>
+            {% endif %}
+        </div>
+    </div>
+    {% empty %}
+    <div class="card border"><div class="card-body text-center py-5">
+        <i class="ri-restaurant-2-line fs-1 text-muted d-block mb-3"></i>
+        <h5 class="text-muted">Önce kategori ve ürün oluşturun</h5>
+    </div></div>
+    {% endfor %}
+</form>
+
+{% endblock content %}
+
+{% block js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.pick-check').forEach(function (chk) {
+        var row = chk.closest('.pick-row');
+        chk.addEventListener('change', function () {
+            row.classList.toggle('is-selected', chk.checked);
+        });
+    });
+});
+</script>
+{% endblock js %}

@@ -1,0 +1,526 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+{% load currency %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Ürün & Menü Yönetimi" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .product-tile {
+        position: relative;
+        border: 1px solid var(--bs-border-color);
+        border-radius: .6rem;
+        overflow: hidden;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .product-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+    .product-tile .thumb {
+        width: 100%; height: 130px; object-fit: cover; background: var(--bs-secondary-bg);
+    }
+    .product-tile .thumb-empty {
+        width: 100%; height: 130px; display: flex; align-items: center; justify-content: center;
+        background: var(--bs-secondary-bg); color: var(--bs-secondary);
+    }
+    .product-tile .price-badge {
+        position: absolute; top: 8px; right: 8px;
+        background: rgba(0,0,0,.65); color: #fff; padding: 2px 10px; border-radius: 999px; font-weight: 700;
+    }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+    .menu-row { border: 1px solid var(--bs-border-color); border-radius: .6rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "menu" "add" as can_add_menu %}
+{% has_ext_perm user "menu" "change" as can_change_menu %}
+{% has_ext_perm user "menu" "delete" as can_delete_menu %}
+
+{% with title_sub="Anasayfa" title="Ürün & Menü Yönetimi" %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<div class="col-12">
+    <div class="card card-h-100">
+        <div class="card-header">
+            <ul class="nav gap-3 custom-verti-nav-pills text-center mb-2" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link active d-flex align-items-center gap-2" data-bs-toggle="tab"
+                       href="#tab_products" role="tab" aria-selected="true">
+                        <i class="ri-restaurant-line d-block fs-20"></i>
+                        <span>Kategoriler & Ürünler</span>
+                    </a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link d-flex align-items-center gap-2" data-bs-toggle="tab"
+                       href="#tab_menus" role="tab" aria-selected="false">
+                        <i class="ri-book-2-line d-block fs-20"></i>
+                        <span>Menüler</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+
+        <div class="card-body">
+            <div class="tab-content">
+
+                <!-- ============ PRODUCTS TAB ============ -->
+                <div class="tab-pane active show" id="tab_products" role="tabpanel">
+
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                        <div class="d-flex flex-wrap align-items-center gap-3">
+                            <span class="badge bg-primary-subtle text-primary fs-13">{{ categories.count }} Kategori</span>
+                            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-success"></span><small class="text-muted">Servise Açık</small></div>
+                            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-warning"></span><small class="text-muted">Tükendi</small></div>
+                            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-secondary"></span><small class="text-muted">Pasif</small></div>
+                        </div>
+                        {% if can_add_menu %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                            <i class="ri-add-line me-1"></i> Yeni Kategori
+                        </button>
+                        {% endif %}
+                    </div>
+
+                    {% for category in categories %}
+                    <div class="card border">
+                        <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div>
+                                <h5 class="card-title mb-1">
+                                    {{ category.name }}
+                                    {% if not category.is_active %}<span class="badge bg-secondary ms-2">Pasif</span>{% endif %}
+                                </h5>
+                                <small class="text-muted">{{ category.product_count }} ürün &middot; {{ category.active_product_count }} aktif</small>
+                            </div>
+                            <div class="d-flex gap-2">
+                                {% if can_add_menu %}
+                                <button type="button" class="btn btn-sm btn-primary add-product-btn"
+                                        data-category-id="{{ category.id }}"
+                                        data-bs-toggle="modal" data-bs-target="#addProductModal">
+                                    <i class="ri-add-line me-1"></i> Ürün Ekle
+                                </button>
+                                {% endif %}
+                                {% if can_change_menu %}
+                                <button type="button" class="btn btn-sm btn-outline-secondary edit-category-btn"
+                                        data-action="{% url 'category-update-category' category.id %}"
+                                        data-name="{{ category.name }}"
+                                        data-description="{{ category.description|default:'' }}"
+                                        data-list_index="{{ category.list_index }}"
+                                        data-is_active="{{ category.is_active|yesno:'1,0' }}"
+                                        data-bs-toggle="modal" data-bs-target="#editCategoryModal">
+                                    <i class="ri-edit-line"></i>
+                                </button>
+                                {% endif %}
+                                {% if can_delete_menu %}
+                                <form method="post" action="{% url 'category-delete-category' category.id %}"
+                                      onsubmit="return confirm('“{{ category.name }}” kategorisini ve içindeki tüm ürünleri silmek istediğinize emin misiniz?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="card-body">
+                            {% if category.products.all %}
+                            <div class="row row-cols-2 row-cols-md-3 row-cols-xxl-4 g-3">
+                                {% for product in category.products.all %}
+                                <div class="col">
+                                    <div class="product-tile h-100 d-flex flex-column">
+                                        {% if product.image %}
+                                        <img src="{{ product.image.url }}" class="thumb" alt="{{ product.name }}">
+                                        {% else %}
+                                        <div class="thumb-empty"><i class="ri-image-line fs-2"></i></div>
+                                        {% endif %}
+                                        <span class="price-badge">{{ product.price|tl_format }}</span>
+
+                                        <div class="p-3 d-flex flex-column flex-grow-1">
+                                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                                <span class="fw-semibold text-truncate">{{ product.name }}</span>
+                                                <span class="badge bg-{{ product.status_color }}-subtle text-{{ product.status_color }} flex-shrink-0">{{ product.status_label }}</span>
+                                            </div>
+                                            {% if product.description %}
+                                            <div class="text-muted fs-12 mt-1 text-truncate">{{ product.description }}</div>
+                                            {% endif %}
+                                            {% if product.preparation_time %}
+                                            <div class="text-muted fs-12 mt-1"><i class="ri-time-line me-1"></i>{{ product.preparation_time }} dk</div>
+                                            {% endif %}
+
+                                            <div class="d-flex gap-1 mt-3 mt-auto">
+                                                {% if can_change_menu %}
+                                                <form method="post" action="{% url 'product-toggle-availability' product.id %}" class="flex-grow-1">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-sm btn-outline-{{ product.status_color }} w-100" title="Servis durumunu değiştir">
+                                                        {% if product.is_available %}<i class="ri-pause-circle-line"></i>{% else %}<i class="ri-play-circle-line"></i>{% endif %}
+                                                    </button>
+                                                </form>
+                                                <button type="button" class="btn btn-sm btn-outline-secondary edit-product-btn"
+                                                        data-action="{% url 'product-update-product' product.id %}"
+                                                        data-category="{{ product.category_id }}"
+                                                        data-name="{{ product.name }}"
+                                                        data-description="{{ product.description|default:'' }}"
+                                                        data-price="{{ product.price }}"
+                                                        data-preparation_time="{{ product.preparation_time|default:'' }}"
+                                                        data-is_active="{{ product.is_active|yesno:'1,0' }}"
+                                                        data-is_available="{{ product.is_available|yesno:'1,0' }}"
+                                                        data-bs-toggle="modal" data-bs-target="#editProductModal">
+                                                    <i class="ri-edit-line"></i>
+                                                </button>
+                                                {% endif %}
+                                                {% if can_delete_menu %}
+                                                <form method="post" action="{% url 'product-delete-product' product.id %}"
+                                                      onsubmit="return confirm('“{{ product.name }}” ürününü silmek istediğinize emin misiniz?');">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+                                                </form>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="alert alert-light text-center border mb-0">Bu kategoride henüz ürün yok.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="card border">
+                        <div class="card-body text-center py-5">
+                            <i class="ri-restaurant-2-line fs-1 text-muted d-block mb-3"></i>
+                            <h5 class="text-muted">Henüz kategori tanımlanmamış</h5>
+                            {% if can_add_menu %}
+                            <button type="button" class="btn btn-primary mt-2" data-bs-toggle="modal" data-bs-target="#addCategoryModal">
+                                <i class="ri-add-line me-1"></i> İlk Kategoriyi Oluştur
+                            </button>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- ============ MENUS TAB ============ -->
+                <div class="tab-pane" id="tab_menus" role="tabpanel">
+                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+                        <span class="badge bg-primary-subtle text-primary fs-13">{{ menus.count }} Menü</span>
+                        {% if can_add_menu %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMenuModal">
+                            <i class="ri-add-line me-1"></i> Yeni Menü
+                        </button>
+                        {% endif %}
+                    </div>
+
+                    <div class="d-flex flex-column gap-3">
+                        {% for menu in menus %}
+                        <div class="menu-row p-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                            <div>
+                                <h6 class="mb-1">
+                                    {{ menu.name }}
+                                    {% if not menu.is_active %}<span class="badge bg-secondary ms-2">Pasif</span>{% endif %}
+                                </h6>
+                                <small class="text-muted">
+                                    {{ menu.product_count }} ürün &middot; {{ menu.category_count }} kategori
+                                </small>
+                                {% if menu.description %}<div class="text-muted fs-12 mt-1">{{ menu.description }}</div>{% endif %}
+                            </div>
+                            <div class="d-flex gap-2">
+                                {% if can_change_menu %}
+                                <a href="{% url 'menu_builder' menu.id %}" class="btn btn-sm btn-outline-primary">
+                                    <i class="ri-list-check-2 me-1"></i> İçeriği Düzenle
+                                </a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary edit-menu-btn"
+                                        data-action="{% url 'menu-update-menu' menu.id %}"
+                                        data-name="{{ menu.name }}"
+                                        data-description="{{ menu.description|default:'' }}"
+                                        data-list_index="{{ menu.list_index }}"
+                                        data-is_active="{{ menu.is_active|yesno:'1,0' }}"
+                                        data-bs-toggle="modal" data-bs-target="#editMenuModal">
+                                    <i class="ri-edit-line"></i>
+                                </button>
+                                {% endif %}
+                                {% if can_delete_menu %}
+                                <form method="post" action="{% url 'menu-delete-menu' menu.id %}"
+                                      onsubmit="return confirm('“{{ menu.name }}” menüsünü silmek istediğinize emin misiniz?');">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+                                </form>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="alert alert-light text-center border mb-0">Henüz menü oluşturulmamış.</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ====================== MODALS ====================== #}
+{% if can_add_menu %}
+<!-- Add Category -->
+<div class="modal fade" id="addCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'category-create-category' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">Yeni Kategori</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Kategori Adı *</label>
+                        <input type="text" name="name" class="form-control" placeholder="örn. İçecekler" required></div>
+                    <div class="mb-3"><label class="form-label">Açıklama</label>
+                        <textarea name="description" class="form-control" rows="2"></textarea></div>
+                    <div class="mb-3"><label class="form-label">Görsel</label>
+                        <input type="file" name="image" accept="image/*" class="form-control"></div>
+                    <div class="mb-0"><label class="form-label">Sıralama</label>
+                        <input type="number" step="any" name="list_index" class="form-control" value="0"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Product -->
+<div class="modal fade" id="addProductModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <form method="post" action="{% url 'product-create-product' %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">Yeni Ürün</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Kategori *</label>
+                        <select name="category" id="addProductCategory" class="form-select" required>
+                            {% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}
+                        </select></div>
+                    <div class="row g-3">
+                        <div class="col-md-7"><label class="form-label">Ürün Adı *</label>
+                            <input type="text" name="name" class="form-control" required></div>
+                        <div class="col-md-5"><label class="form-label">Fiyat (₺) *</label>
+                            <input type="text" name="price" class="form-control" placeholder="0,00" required></div>
+                        <div class="col-12"><label class="form-label">Açıklama</label>
+                            <textarea name="description" class="form-control" rows="2"></textarea></div>
+                        <div class="col-md-6"><label class="form-label">Görsel</label>
+                            <input type="file" name="image" accept="image/*" class="form-control"></div>
+                        <div class="col-md-6"><label class="form-label">Hazırlık Süresi (dk)</label>
+                            <input type="number" name="preparation_time" class="form-control" min="0"></div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_available" value="1" checked id="addProductAvailable">
+                                <label class="form-check-label" for="addProductAvailable">Servise Açık</label></div></div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="is_active" value="1" checked id="addProductActive">
+                                <label class="form-check-label" for="addProductActive">Aktif</label></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Add Menu -->
+<div class="modal fade" id="addMenuModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'menu-create-menu' %}">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">Yeni Menü</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Menü Adı *</label>
+                        <input type="text" name="name" class="form-control" placeholder="örn. Öğle Menüsü" required></div>
+                    <div class="mb-3"><label class="form-label">Açıklama</label>
+                        <textarea name="description" class="form-control" rows="2"></textarea></div>
+                    <div class="mb-0"><label class="form-label">Sıralama</label>
+                        <input type="number" step="any" name="list_index" class="form-control" value="0"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if can_change_menu %}
+<!-- Edit Category -->
+<div class="modal fade" id="editCategoryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" id="editCategoryForm" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">Kategoriyi Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Kategori Adı *</label>
+                        <input type="text" name="name" id="editCategoryName" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Açıklama</label>
+                        <textarea name="description" id="editCategoryDescription" class="form-control" rows="2"></textarea></div>
+                    <div class="mb-3"><label class="form-label">Görsel (değiştirmek için seçin)</label>
+                        <input type="file" name="image" accept="image/*" class="form-control">
+                        <div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="image_clear" value="1" id="editCategoryImageClear">
+                            <label class="form-check-label" for="editCategoryImageClear">Mevcut görseli kaldır</label></div></div>
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label">Sıralama</label>
+                            <input type="number" step="any" name="list_index" id="editCategoryIndex" class="form-control"></div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="editCategoryActive">
+                                <label class="form-check-label" for="editCategoryActive">Aktif</label></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Product -->
+<div class="modal fade" id="editProductModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <form method="post" id="editProductForm" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">Ürünü Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Kategori *</label>
+                        <select name="category" id="editProductCategory" class="form-select" required>
+                            {% for category in categories %}<option value="{{ category.id }}">{{ category.name }}</option>{% endfor %}
+                        </select></div>
+                    <div class="row g-3">
+                        <div class="col-md-7"><label class="form-label">Ürün Adı *</label>
+                            <input type="text" name="name" id="editProductName" class="form-control" required></div>
+                        <div class="col-md-5"><label class="form-label">Fiyat (₺) *</label>
+                            <input type="text" name="price" id="editProductPrice" class="form-control" required></div>
+                        <div class="col-12"><label class="form-label">Açıklama</label>
+                            <textarea name="description" id="editProductDescription" class="form-control" rows="2"></textarea></div>
+                        <div class="col-md-6"><label class="form-label">Görsel (değiştirmek için seçin)</label>
+                            <input type="file" name="image" accept="image/*" class="form-control">
+                            <div class="form-check mt-2"><input class="form-check-input" type="checkbox" name="image_clear" value="1" id="editProductImageClear">
+                                <label class="form-check-label" for="editProductImageClear">Mevcut görseli kaldır</label></div></div>
+                        <div class="col-md-6"><label class="form-label">Hazırlık Süresi (dk)</label>
+                            <input type="number" name="preparation_time" id="editProductPrep" class="form-control" min="0"></div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_available" value="1" id="editProductAvailable">
+                                <label class="form-check-label" for="editProductAvailable">Servise Açık</label></div></div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="editProductActive">
+                                <label class="form-check-label" for="editProductActive">Aktif</label></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Menu -->
+<div class="modal fade" id="editMenuModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" id="editMenuForm">
+                {% csrf_token %}
+                <div class="modal-header"><h5 class="modal-title">Menüyü Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body">
+                    <div class="mb-3"><label class="form-label">Menü Adı *</label>
+                        <input type="text" name="name" id="editMenuName" class="form-control" required></div>
+                    <div class="mb-3"><label class="form-label">Açıklama</label>
+                        <textarea name="description" id="editMenuDescription" class="form-control" rows="2"></textarea></div>
+                    <div class="row g-3">
+                        <div class="col-md-6"><label class="form-label">Sıralama</label>
+                            <input type="number" step="any" name="list_index" id="editMenuIndex" class="form-control"></div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_active" value="1" id="editMenuActive">
+                                <label class="form-check-label" for="editMenuActive">Aktif</label></div></div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock content %}
+
+{% block js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.add-product-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var sel = document.getElementById('addProductCategory');
+            if (sel) sel.value = this.dataset.categoryId;
+        });
+    });
+
+    document.querySelectorAll('.edit-category-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var d = this.dataset;
+            document.getElementById('editCategoryForm').action = d.action;
+            document.getElementById('editCategoryName').value = d.name || '';
+            document.getElementById('editCategoryDescription').value = d.description || '';
+            document.getElementById('editCategoryIndex').value = d.list_index || 0;
+            document.getElementById('editCategoryActive').checked = d.is_active === '1';
+            document.getElementById('editCategoryImageClear').checked = false;
+        });
+    });
+
+    document.querySelectorAll('.edit-product-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var d = this.dataset;
+            document.getElementById('editProductForm').action = d.action;
+            document.getElementById('editProductCategory').value = d.category;
+            document.getElementById('editProductName').value = d.name || '';
+            document.getElementById('editProductDescription').value = d.description || '';
+            document.getElementById('editProductPrice').value = d.price || '0';
+            document.getElementById('editProductPrep').value = d.preparation_time || '';
+            document.getElementById('editProductActive').checked = d.is_active === '1';
+            document.getElementById('editProductAvailable').checked = d.is_available === '1';
+            document.getElementById('editProductImageClear').checked = false;
+        });
+    });
+
+    document.querySelectorAll('.edit-menu-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var d = this.dataset;
+            document.getElementById('editMenuForm').action = d.action;
+            document.getElementById('editMenuName').value = d.name || '';
+            document.getElementById('editMenuDescription').value = d.description || '';
+            document.getElementById('editMenuIndex').value = d.list_index || 0;
+            document.getElementById('editMenuActive').checked = d.is_active === '1';
+        });
+    });
+});
+</script>
+{% endblock js %}

@@ -19,16 +19,22 @@
                         <span class="pe-nav-content">Anasayfa</span>
                     </a>
                 </li>
-                <li class="pe-slide pe-has-sub">
-                    <a href="{% url 'settings' %}" class="pe-nav-link">
-                        <i class="ri-settings-line pe-nav-icon"></i>
-                        <span class="pe-nav-content">Ayarlar</span>
-                    </a>
-                </li>
+                    <li class="pe-slide pe-has-sub">
+                        <a href="{% url 'menu_management' %}" class="pe-nav-link">
+                            <i class="ri-book-2-line pe-nav-icon"></i>
+                            <span class="pe-nav-content">Ürün & Menü</span>
+                        </a>
+                    </li>
                 <li class="pe-slide pe-has-sub">
                     <a href="{% url 'tables' %}" class="pe-nav-link">
                         <i class="ri-restaurant-2-line pe-nav-icon"></i>
                         <span class="pe-nav-content">Masa & Salon</span>
+                    </a>
+                </li>
+                <li class="pe-slide pe-has-sub">
+                    <a href="{% url 'settings' %}" class="pe-nav-link">
+                        <i class="ri-settings-line pe-nav-icon"></i>
+                        <span class="pe-nav-content">Ayarlar</span>
                     </a>
                 </li>
             </ul>

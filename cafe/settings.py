@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'province',
     'common',
     'dining',
+    'menu',
     'settings',
 ]
 MIDDLEWARE = [
