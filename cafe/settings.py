@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'dining',
     'menu',
     'orders',
+    'waiter',
     'settings',
 ]
 MIDDLEWARE = [

@@ -1,0 +1,167 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+{% load currency %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Adisyon "|add:order.code %}{% include "partials/title-meta.html" %}{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .menu-scroll { max-height: 72vh; overflow-y: auto; }
+    .prod-btn {
+        border: 1px solid var(--bs-border-color); border-radius: .6rem;
+        padding: .75rem .85rem; width: 100%; text-align: left; background: var(--bs-body-bg);
+        transition: border-color .15s, transform .1s; min-height: 64px;
+    }
+    .prod-btn:active:not(:disabled) { transform: scale(.98); }
+    .prod-btn:disabled { opacity: .5; }
+    .items-scroll { max-height: 46vh; overflow-y: auto; }
+    .line-item { border-bottom: 1px dashed var(--bs-border-color); }
+    .line-item:last-child { border-bottom: none; }
+    .qty-btn { width: 34px; height: 34px; padding: 0; }
+    @media (min-width: 992px) { .ticket-col { position: sticky; top: 1rem; } }
+</style>
+{% endblock %}
+
+{% block content %}
+{% has_ext_perm user "waiter" "change" as can_change %}
+{% has_ext_perm user "waiter" "add" as can_add %}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <a href="{% url 'waiter_floor' %}" class="btn btn-sm btn-light"><i class="ri-arrow-left-line me-1"></i> Salon</a>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-{{ order.status_color }}-subtle text-{{ order.status_color }} fs-13">{{ order.get_status_display }}</span>
+        <span class="fw-semibold">
+            {% if order.table %}<i class="ri-restaurant-2-line me-1"></i>{{ order.table.name }}{% else %}<i class="ri-takeaway-line me-1"></i>Paket{% endif %}
+            <small class="text-muted ms-1">{{ order.code }}</small>
+        </span>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Menü -->
+    <div class="col-12 col-lg-7">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0">Menü</h5></div>
+            <div class="card-body menu-scroll">
+                {% if not order.is_open %}
+                <div class="alert alert-light border">Bu adisyon kapanmış; yeni ürün eklenemez.</div>
+                {% endif %}
+                {% for category in categories %}
+                <h6 class="text-muted mt-2 mb-2">{{ category.name }}</h6>
+                <div class="row row-cols-1 row-cols-md-2 g-2 mb-3">
+                    {% for product in category.products.all %}
+                    <div class="col">
+                        <form method="post" action="{% url 'waiter_add_item' order.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="product" value="{{ product.id }}">
+                            <input type="hidden" name="quantity" value="1">
+                            <button type="submit" class="prod-btn d-flex justify-content-between align-items-center"
+                                    {% if not can_add or not order.is_open or not product.is_active %}disabled{% endif %}>
+                                <span class="text-truncate">
+                                    {{ product.name }}
+                                    {% if not product.is_available %}<span class="badge bg-warning-subtle text-warning ms-1">Tükendi</span>{% endif %}
+                                </span>
+                                <span class="fw-semibold ms-2 flex-shrink-0">{{ product.price|tl_format }}</span>
+                            </button>
+                        </form>
+                    </div>
+                    {% empty %}
+                    <div class="col"><small class="text-muted">Ürün yok.</small></div>
+                    {% endfor %}
+                </div>
+                {% empty %}
+                <div class="alert alert-light text-center border mb-0">Aktif kategori bulunamadı.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Adisyon -->
+    <div class="col-12 col-lg-5">
+        <div class="ticket-col">
+            <div class="card">
+                <div class="card-header d-flex align-items-center justify-content-between">
+                    <h5 class="card-title mb-0">Adisyon</h5>
+                    <span class="text-muted fs-13">{{ order.item_count }} kalem</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="items-scroll px-3 py-2">
+                        {% for item in order.items.all %}
+                        {% if item.status != 'cancelled' %}
+                        <div class="line-item py-2">
+                            <div class="d-flex align-items-center justify-content-between gap-2">
+                                <span class="fw-semibold text-truncate">{{ item.name }}</span>
+                                <span class="fw-semibold flex-shrink-0">{{ item.line_total|tl_format }}</span>
+                            </div>
+                            <div class="d-flex align-items-center justify-content-between mt-2">
+                                <span class="badge bg-{{ item.status_color }}-subtle text-{{ item.status_color }}">{{ item.get_status_display }}</span>
+                                {% if can_change and order.is_open %}
+                                <div class="d-flex align-items-center gap-1">
+                                    <form method="post" action="{% url 'waiter_update_item' item.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="order" value="{{ order.id }}">
+                                        <input type="hidden" name="quantity" value="{{ item.quantity|add:'-1' }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary qty-btn" {% if item.quantity <= 1 %}disabled{% endif %}>−</button>
+                                    </form>
+                                    <span class="fw-semibold px-1" style="min-width:24px;text-align:center;">{{ item.quantity }}</span>
+                                    <form method="post" action="{% url 'waiter_update_item' item.id %}">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="order" value="{{ order.id }}">
+                                        <input type="hidden" name="quantity" value="{{ item.quantity|add:1 }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-secondary qty-btn">+</button>
+                                    </form>
+                                    <form method="post" action="{% url 'waiter_delete_item' item.id %}"
+                                          onsubmit="return confirm('“{{ item.name }}” kaldırılsın mı?');">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="order" value="{{ order.id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger qty-btn"><i class="ri-delete-bin-5-line"></i></button>
+                                    </form>
+                                </div>
+                                {% else %}
+                                <span class="text-muted fs-13">×{{ item.quantity }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% empty %}
+                        <div class="alert alert-light text-center border my-3">Henüz ürün eklenmedi.</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="border-top p-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Ara Toplam</span><span>{{ order.subtotal|tl_format }}</span>
+                        </div>
+                        <div class="d-flex justify-content-between fs-5 fw-bold mt-2 pt-2 border-top">
+                            <span>Toplam</span><span>{{ order.total|tl_format }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {% if can_change and order.is_open %}
+            <div class="d-grid gap-2">
+                <form method="post" action="{% url 'waiter_send_kitchen' order.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary w-100"><i class="ri-fire-line me-1"></i> Mutfağa Gönder</button>
+                </form>
+                <form method="post" action="{% url 'waiter_mark_served' order.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-primary w-100"><i class="ri-check-double-line me-1"></i> Servis Edildi</button>
+                </form>
+                {% has_ext_perm user "orders" "view" as can_cashier %}
+                {% if can_cashier %}
+                <a href="{% url 'order_detail' order.id %}" class="btn btn-outline-success w-100"><i class="ri-bank-card-line me-1"></i> Kasa / Ödeme</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock content %}
+{% block js %}{% endblock js %}
