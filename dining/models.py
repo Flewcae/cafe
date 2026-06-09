@@ -1,6 +1,7 @@
 from django.db import models
-
+import uuid
 from cafe.action_resolver import UserGenException
+
 
 
 def _to_float(value, default=0):
@@ -212,7 +213,9 @@ class Table(models.Model):
         ('round', 'Yuvarlak'),
         ('rectangle', 'Dikdörtgen'),
     ]
-
+    qr_token = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False, verbose_name="QR Anahtarı"
+    )
     room = models.ForeignKey(
         Room, on_delete=models.CASCADE, related_name='tables', verbose_name="Salon"
     )

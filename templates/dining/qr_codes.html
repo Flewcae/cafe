@@ -1,0 +1,56 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% block meta %}{% with title="Masa QR Kodları" %}{% include "partials/title-meta.html" %}{% endwith %}{% endblock %}
+
+{% block css %}
+<style>
+    .qr-card { border:1px solid var(--bs-border-color); border-radius:.6rem; padding:18px; text-align:center; }
+    .qr-card img { width:160px; height:160px; }
+    .qr-card .qrlink { font-size:.7rem; word-break:break-all; color:#888; margin-top:6px; }
+    @media print {
+        body * { visibility:hidden; }
+        #printArea, #printArea * { visibility:visible; }
+        #printArea { position:absolute; left:0; top:0; width:100%; }
+        .no-print { display:none !important; }
+        .qr-card { page-break-inside:avoid; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% with title_sub="Masa & Salon Yönetimi" title="Masa QR Kodları" %}{% include "partials/pagetitle.html" %}{% endwith %}
+
+<div class="d-flex justify-content-between align-items-center mb-3 no-print">
+    <a href="{% url 'tables' %}" class="btn btn-sm btn-light"><i class="ri-arrow-left-line me-1"></i> Salon Listesi</a>
+    <div class="d-flex gap-2">
+        <a href="{% url 'table_qr_zip' %}" class="btn btn-success"><i class="ri-folder-zip-line me-1"></i> Tümünü ZIP İndir</a>
+        <button class="btn btn-primary" onclick="window.print()"><i class="ri-printer-line me-1"></i> Yazdır</button>
+    </div>
+</div>
+
+<div id="printArea">
+    {% for room in rooms %}
+    <div class="card">
+        <div class="card-header"><h5 class="card-title mb-0">{{ room.name }}</h5></div>
+        <div class="card-body">
+            <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-3">
+                {% for table in room.tables.all %}
+                <div class="col">
+                    <div class="qr-card">
+                        <div class="fw-bold">{{ table.name }}</div>
+                        <small class="text-muted">{{ room.name }}</small>
+                        <div><img src="{% url 'table_qr_png' table.qr_token %}" alt="{{ table.name }} QR"></div>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="col-12"><div class="alert alert-light text-center border mb-0">Bu salonda masa yok.</div></div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card"><div class="card-body text-center py-5 text-muted">Aktif salon bulunamadı.</div></div>
+    {% endfor %}
+</div>
+{% endblock %}
+{% block js %}{% endblock js %}

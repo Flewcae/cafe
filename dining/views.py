@@ -2,6 +2,7 @@ import json
 
 from django.db import transaction
 from django.shortcuts import get_object_or_404, render
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -11,6 +12,11 @@ from common.decorators import anahtar_auth
 from .models import Room, Table
 from .serializers import RoomSerializer, TableSerializer
 
+import io
+import zipfile
+from django.http import HttpResponse
+from django.urls import reverse
+from .qr import make_qr_png, safe_name
 
 # ---------------------------------------------------------------------------
 # Management pages
@@ -53,7 +59,56 @@ def room_layout_editor(request, pk):
     }
     return render(request, 'dining/layout_editor.html', context)
 
+# ---------------------------------------------------------------------------
+# QR kodları (Python ile üretim)
+# ---------------------------------------------------------------------------
+@anahtar_auth(perm="tables", action="view")
+def table_qr_codes(request):
+    """Masalara ait QR kodlarının (sunucu tarafı PNG) yazdırılabilir listesi."""
+    rooms = (
+        Room.objects.filter(is_active=True)
+        .prefetch_related('tables')
+        .order_by('list_index', 'name')
+    )
+    return render(request, 'dining/qr_codes.html', {'rooms': rooms})
 
+
+@anahtar_auth(perm="tables", action="view")
+def table_qr_png(request, token):
+    """Tek bir masanın QR kodunu PNG olarak döndürür (sayfada <img> ve önizleme için)."""
+    table = get_object_or_404(Table, qr_token=token)
+    url = request.build_absolute_uri(reverse('customer_menu', args=[table.qr_token]))
+    return HttpResponse(make_qr_png(url), content_type='image/png')
+
+
+@anahtar_auth(perm="tables", action="view")
+def table_qr_zip(request):
+    """Tüm aktif masaların QR kodlarını tek bir ZIP olarak indirir."""
+    rooms = (
+        Room.objects.filter(is_active=True)
+        .prefetch_related('tables')
+        .order_by('list_index', 'name')
+    )
+
+    buffer = io.BytesIO()
+    manifest = ["Masa QR Kodları — URL Listesi", "=" * 40, ""]
+
+    with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for room in rooms:
+            room_dir = safe_name(room.name)
+            for table in room.tables.all():
+                url = request.build_absolute_uri(
+                    reverse('customer_menu', args=[table.qr_token])
+                )
+                fname = f"{room_dir}/{safe_name(table.name)}.png"
+                zf.writestr(fname, make_qr_png(url))
+                manifest.append(f"{room.name} / {table.name}: {url}")
+
+        zf.writestr("urls.txt", "\n".join(manifest))
+
+    resp = HttpResponse(buffer.getvalue(), content_type='application/zip')
+    resp['Content-Disposition'] = 'attachment; filename="masa-qr-kodlari.zip"'
+    return resp
 # ---------------------------------------------------------------------------
 # Room API + form actions
 # ---------------------------------------------------------------------------

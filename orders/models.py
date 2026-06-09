@@ -264,7 +264,90 @@ class Order(models.Model):
                 self.set_status(self.STATUS_PAID)
         return receipt
 
+    @classmethod
+    def get_or_create_open_for_table(cls, table, user=None):
+        """Masada açık adisyon varsa onu döndürür, yoksa yeni açar."""
+        existing = (
+            cls.objects
+            .exclude(status__in=cls.CLOSED_STATUSES)
+            .filter(table=table)
+            .order_by('-created_at')
+            .first()
+        )
+        if existing:
+            return existing
+        order = cls.objects.create(
+            table=table,
+            order_type=cls.TYPE_DINE_IN,
+            created_by=user if (user and getattr(user, 'is_authenticated', False)) else None,
+        )
+        order._occupy_table()
+        return order
 
+    @classmethod
+    def place_customer_order(cls, table, items, note=None):
+        """QR ile gelen müşteri siparişini işler (giriş gerektirmez).
+
+        ``items`` -> [{"product": <id>, "quantity": <n>}, ...]
+        Masada açık adisyon varsa kalemler ona eklenir; yoksa yeni açılır.
+        """
+        from menu.models import Product
+
+        if not table:
+            raise UserGenException("Masa bulunamadı.")
+        if not isinstance(items, list) or not items:
+            raise UserGenException("Sepetiniz boş.")
+
+        # Aynı ürünleri birleştir + miktarları doğrula
+        wanted = {}
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            pid = it.get('product') or it.get('id')
+            qty = _to_int(it.get('quantity'), 0)
+            if not pid or qty < 1:
+                continue
+            try:
+                pid = int(pid)
+            except (TypeError, ValueError):
+                continue
+            wanted[pid] = wanted.get(pid, 0) + qty
+
+        if not wanted:
+            raise UserGenException("Geçerli ürün seçilmedi.")
+
+        products = {p.id: p for p in Product.objects.filter(id__in=wanted.keys())}
+
+        with transaction.atomic():
+            order = cls.get_or_create_open_for_table(table)
+
+            if note:
+                note = str(note)[:500]
+                order.note = (order.note + "\n" if order.note else "") + f"[Müşteri] {note}"
+                order.save(update_fields=['note'])
+
+            for pid, qty in wanted.items():
+                product = products.get(pid)
+                if not product:
+                    raise UserGenException("Seçilen ürünlerden biri bulunamadı.")
+                if not product.is_active or not product.is_available:
+                    raise UserGenException(f"'{product.name}' şu anda servise kapalı.")
+
+                existing = order.items.filter(
+                    product=product, status=OrderItem.STATUS_PENDING
+                ).first()
+                if existing:
+                    existing.quantity += qty
+                    existing.save(update_fields=['quantity'])
+                else:
+                    OrderItem.objects.create(
+                        order=order,
+                        product=product,
+                        name=product.name,
+                        unit_price=product.price,
+                        quantity=qty,
+                    )
+        return order
 # ---------------------------------------------------------------------------
 # OrderItem  (adisyon kalemi — ürün adı ve fiyatı sipariş anında kopyalanır)
 # ---------------------------------------------------------------------------
