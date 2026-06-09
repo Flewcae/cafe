@@ -1,0 +1,243 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+{% load currency %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Adisyon "|add:order.code %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .menu-scroll { max-height: 72vh; overflow-y: auto; }
+    .prod-btn {
+        border: 1px solid var(--bs-border-color); border-radius: .5rem;
+        padding: .6rem .75rem; width: 100%; text-align: left; background: var(--bs-body-bg);
+        transition: border-color .15s, transform .1s;
+    }
+    .prod-btn:hover:not(:disabled) { border-color: var(--pe-primary, #0d6efd); transform: translateY(-1px); }
+    .prod-btn:disabled { opacity: .5; cursor: not-allowed; }
+    .items-scroll { max-height: 48vh; overflow-y: auto; }
+    .line-item { border-bottom: 1px dashed var(--bs-border-color); }
+    .line-item:last-child { border-bottom: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "orders" "change" as can_change_orders %}
+{% has_ext_perm user "orders" "delete" as can_delete_orders %}
+
+{% with title_sub="Sipariş & Adisyon Yönetimi" title=order.code %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+    <a href="{% url 'orders' %}" class="btn btn-sm btn-light"><i class="ri-arrow-left-line me-1"></i> Adisyonlar</a>
+    <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-{{ order.status_color }}-subtle text-{{ order.status_color }} fs-13">{{ order.get_status_display }}</span>
+        <span class="text-muted fs-13">
+            {% if order.table %}<i class="ri-restaurant-2-line me-1"></i>{{ order.table.name }}{% else %}<i class="ri-takeaway-line me-1"></i>Paket{% endif %}
+        </span>
+    </div>
+</div>
+
+<div class="row g-3">
+
+    <!-- ============ MENU ============ -->
+    <div class="col-12 col-lg-7">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0">Menü</h5></div>
+            <div class="card-body menu-scroll">
+                {% if not order.is_open %}
+                <div class="alert alert-light border">Bu adisyon kapanmış; yeni ürün eklenemez.</div>
+                {% endif %}
+                {% for category in categories %}
+                <h6 class="text-muted mt-2 mb-2">{{ category.name }}</h6>
+                <div class="row row-cols-1 row-cols-md-2 g-2 mb-3">
+                    {% for product in category.products.all %}
+                    <div class="col">
+                        <form method="post" action="{% url 'order-add-item' order.id %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="product" value="{{ product.id }}">
+                            <input type="hidden" name="quantity" value="1">
+                            <button type="submit" class="prod-btn d-flex justify-content-between align-items-center"
+                                    {% if not can_change_orders or not order.is_open or not product.is_active %}disabled{% endif %}>
+                                <span class="text-truncate">
+                                    {{ product.name }}
+                                    {% if not product.is_available %}<span class="badge bg-warning-subtle text-warning ms-1">Tükendi</span>{% endif %}
+                                </span>
+                                <span class="fw-semibold ms-2 flex-shrink-0">{{ product.price|tl_format }}</span>
+                            </button>
+                        </form>
+                    </div>
+                    {% empty %}
+                    <div class="col"><small class="text-muted">Ürün yok.</small></div>
+                    {% endfor %}
+                </div>
+                {% empty %}
+                <div class="alert alert-light text-center border mb-0">Aktif kategori bulunamadı.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ ADISYON ============ -->
+    <div class="col-12 col-lg-5">
+        <div class="card">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <h5 class="card-title mb-0">Adisyon</h5>
+                <span class="text-muted fs-13">{{ order.item_count }} kalem</span>
+            </div>
+            <div class="card-body p-0">
+                <div class="items-scroll px-3 py-2">
+                    {% for item in order.items.all %}
+                    {% if item.status != 'cancelled' %}
+                    <div class="line-item py-2">
+                        <div class="d-flex align-items-center justify-content-between gap-2">
+                            <span class="fw-semibold text-truncate">{{ item.name }}</span>
+                            <span class="fw-semibold flex-shrink-0">{{ item.line_total|tl_format }}</span>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-between mt-1">
+                            <span class="badge bg-{{ item.status_color }}-subtle text-{{ item.status_color }}">{{ item.get_status_display }}</span>
+                            <div class="d-flex align-items-center gap-1">
+                                {% if can_change_orders and order.is_open %}
+                                <form method="post" action="{% url 'order-item-update-item' item.id %}" class="d-flex align-items-center gap-1">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="order" value="{{ order.id }}">
+                                    <input type="number" name="quantity" value="{{ item.quantity }}" min="1"
+                                           class="form-control form-control-sm" style="width:62px;"
+                                           onchange="this.form.submit()">
+                                </form>
+                                <form method="post" action="{% url 'order-item-delete-item' item.id %}"
+                                      onsubmit="return confirm('“{{ item.name }}” kalemini kaldırmak istediğinize emin misiniz?');">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="order" value="{{ order.id }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+                                </form>
+                                {% else %}
+                                <span class="text-muted fs-13">×{{ item.quantity }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% empty %}
+                    <div class="alert alert-light text-center border my-3">Henüz ürün eklenmedi.</div>
+                    {% endfor %}
+                </div>
+
+                <div class="border-top p-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Ara Toplam</span><span>{{ order.subtotal|tl_format }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Ödenen</span><span class="text-success">{{ order.total_paid|tl_format }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between fs-5 fw-bold mt-2 pt-2 border-top">
+                        <span>Kalan</span>
+                        <span class="text-{% if order.balance > 0 %}danger{% else %}success{% endif %}">{{ order.balance|tl_format }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Durum -->
+        {% if can_change_orders and order.is_open %}
+        <div class="card">
+            <div class="card-header"><h6 class="card-title mb-0">Durum</h6></div>
+            <div class="card-body">
+                <form method="post" action="{% url 'order-set-status' order.id %}" class="d-flex gap-2">
+                    {% csrf_token %}
+                    <select name="status" class="form-select">
+                        {% for value, label in order_status_choices %}
+                        {% if value != 'paid' and value != 'cancelled' %}
+                        <option value="{{ value }}" {% if order.status == value %}selected{% endif %}>{{ label }}</option>
+                        {% endif %}
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-outline-primary flex-shrink-0">Güncelle</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Ödeme -->
+        {% if can_change_orders and order.is_open %}
+        <div class="card">
+            <div class="card-header"><h6 class="card-title mb-0">Ödeme Al</h6></div>
+            <div class="card-body">
+                <form method="post" action="{% url 'order-add-payment' order.id %}">
+                    {% csrf_token %}
+                    <div class="row g-2">
+                        <div class="col-7">
+                            <label class="form-label">Tutar (₺)</label>
+                            <input type="text" name="amount" class="form-control" value="{{ order.balance }}" required>
+                        </div>
+                        <div class="col-5">
+                            <label class="form-label">Yöntem</label>
+                            <select name="method" class="form-select">
+                                {% for value, label in payment_methods %}
+                                <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100 mt-3">
+                        <i class="ri-bank-card-line me-1"></i> Ödeme Al
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Ödeme geçmişi -->
+        {% if order.receipts.all %}
+        <div class="card">
+            <div class="card-header"><h6 class="card-title mb-0">Ödeme Geçmişi</h6></div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for receipt in order.receipts.all %}
+                    <li class="list-group-item d-flex align-items-center justify-content-between">
+                        <span>
+                            <span class="badge bg-light text-dark border me-2">{{ receipt.code }}</span>
+                            {{ receipt.get_method_display }}
+                            <small class="text-muted ms-1">{{ receipt.paid_at|date:"d.m.Y H:i" }}</small>
+                        </span>
+                        <span class="d-flex align-items-center gap-2">
+                            <span class="fw-semibold">{{ receipt.amount|tl_format }}</span>
+                            {% if can_delete_orders and order.is_open %}
+                            <form method="post" action="{% url 'receipt-delete-receipt' receipt.id %}"
+                                  onsubmit="return confirm('Bu ödeme kaydını silmek istediğinize emin misiniz?');">
+                                {% csrf_token %}
+                                <input type="hidden" name="order" value="{{ order.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
+                            </form>
+                            {% endif %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- İptal -->
+        {% if can_change_orders and order.is_open %}
+        <form method="post" action="{% url 'order-cancel-order' order.id %}"
+              onsubmit="return confirm('Bu adisyonu iptal etmek istediğinize emin misiniz?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-outline-danger w-100">
+                <i class="ri-close-circle-line me-1"></i> Adisyonu İptal Et
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock content %}
+{% block js %}{% endblock js %}

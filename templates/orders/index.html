@@ -1,0 +1,216 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+{% load ext_permissions %}
+{% load currency %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Sipariş & Adisyon Yönetimi" %}
+{% include "partials/title-meta.html" %}
+{% endwith %}
+{% endblock %}
+
+{% block css %}
+<style>
+    .order-tile {
+        position: relative;
+        border: 1px solid var(--bs-border-color);
+        border-radius: .6rem;
+        overflow: hidden;
+        transition: transform .15s ease, box-shadow .15s ease;
+    }
+    .order-tile:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+    .order-tile::before {
+        content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+        background: var(--bs-secondary);
+    }
+    .order-tile[data-status="open"]::before      { background: var(--bs-info); }
+    .order-tile[data-status="preparing"]::before { background: var(--bs-warning); }
+    .order-tile[data-status="served"]::before    { background: var(--bs-primary); }
+    .legend-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% has_ext_perm user "orders" "add" as can_add_orders %}
+{% has_ext_perm user "orders" "change" as can_change_orders %}
+{% has_ext_perm user "orders" "delete" as can_delete_orders %}
+
+{% with title_sub="Anasayfa" title="Sipariş & Adisyon Yönetimi" %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<!-- Toolbar -->
+<div class="card mb-4">
+    <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <span class="badge bg-info-subtle text-info fs-13">{{ open_orders|length }} Açık Adisyon</span>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-info"></span><small class="text-muted">Açık</small></div>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-warning"></span><small class="text-muted">Hazırlanıyor</small></div>
+            <div class="d-flex align-items-center gap-2"><span class="legend-dot bg-primary"></span><small class="text-muted">Servis Edildi</small></div>
+        </div>
+        {% if can_add_orders %}
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newOrderModal">
+            <i class="ri-add-line me-1"></i> Yeni Adisyon
+        </button>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Açık adisyonlar -->
+<div class="card">
+    <div class="card-header"><h5 class="card-title mb-0">Açık Adisyonlar</h5></div>
+    <div class="card-body">
+        {% if open_orders %}
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3">
+            {% for order in open_orders %}
+            <div class="col">
+                <div class="order-tile h-100 d-flex flex-column p-3 ps-4" data-status="{{ order.status }}">
+                    <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
+                        <span class="fw-semibold text-truncate">
+                            {% if order.table %}<i class="ri-restaurant-2-line me-1"></i>{{ order.table.name }}
+                            {% else %}<i class="ri-takeaway-line me-1"></i>Paket{% endif %}
+                            <small class="text-muted ms-1">{{ order.code }}</small>
+                        </span>
+                        <span class="badge bg-{{ order.status_color }}-subtle text-{{ order.status_color }} flex-shrink-0">{{ order.get_status_display }}</span>
+                    </div>
+
+                    <div class="text-muted fs-12 mb-2">
+                        <i class="ri-shopping-basket-2-line me-1"></i>{{ order.item_count }} kalem
+                        &middot; {{ order.created_at|date:"d.m.Y H:i" }}
+                    </div>
+
+                    <div class="d-flex justify-content-between fs-13 mb-1">
+                        <span class="text-muted">Toplam</span>
+                        <span class="fw-semibold">{{ order.total|tl_format }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between fs-13 mb-3">
+                        <span class="text-muted">Kalan</span>
+                        <span class="fw-semibold text-{% if order.balance > 0 %}danger{% else %}success{% endif %}">{{ order.balance|tl_format }}</span>
+                    </div>
+
+                    <div class="d-flex gap-1 mt-auto">
+                        <a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-primary flex-grow-1">
+                            <i class="ri-edit-2-line me-1"></i> Aç
+                        </a>
+                        {% if can_change_orders %}
+                        <form method="post" action="{% url 'order-cancel-order' order.id %}"
+                              onsubmit="return confirm('“{{ order }}” adisyonunu iptal etmek istediğinize emin misiniz?');">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="İptal Et"><i class="ri-close-circle-line"></i></button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-light text-center border mb-0">Açık adisyon bulunmuyor.</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Son kapanan adisyonlar -->
+<div class="card">
+    <div class="card-header"><h5 class="card-title mb-0">Son Kapanan Adisyonlar</h5></div>
+    <div class="card-body">
+        {% if recent_closed %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th><th>Hedef</th><th>Durum</th><th>Toplam</th><th>Tarih</th><th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for order in recent_closed %}
+                    <tr>
+                        <td>{{ order.code }}</td>
+                        <td>{% if order.table %}{{ order.table.name }}{% else %}Paket{% endif %}</td>
+                        <td><span class="badge bg-{{ order.status_color }}-subtle text-{{ order.status_color }}">{{ order.get_status_display }}</span></td>
+                        <td>{{ order.total|tl_format }}</td>
+                        <td class="text-muted">{{ order.closed_at|default:order.created_at|date:"d.m.Y H:i" }}</td>
+                        <td class="text-end">
+                            <a href="{% url 'order_detail' order.id %}" class="btn btn-sm btn-outline-secondary"><i class="ri-eye-line"></i></a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-light text-center border mb-0">Henüz kapanmış adisyon yok.</div>
+        {% endif %}
+    </div>
+</div>
+
+{% if can_add_orders %}
+<!-- New Order Modal -->
+<div class="modal fade" id="newOrderModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'order-create-order' %}">
+                {% csrf_token %}
+                <div class="modal-header">
+                    <h5 class="modal-title">Yeni Adisyon</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Sipariş Tipi *</label>
+                        <select name="order_type" id="newOrderType" class="form-select">
+                            {% for value, label in type_choices %}
+                            <option value="{{ value }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3" id="tableSelectWrap">
+                        <label class="form-label">Masa *</label>
+                        <select name="table" id="newOrderTable" class="form-select">
+                            {% for room in rooms %}
+                            <optgroup label="{{ room.name }}">
+                                {% for table in room.tables.all %}
+                                <option value="{{ table.id }}">{{ table.name }} ({{ table.capacity }} kişilik)</option>
+                                {% endfor %}
+                            </optgroup>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label">Not</label>
+                        <textarea name="note" class="form-control" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-primary">Adisyon Aç</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock content %}
+
+{% block js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var typeSel = document.getElementById('newOrderType');
+    var wrap = document.getElementById('tableSelectWrap');
+    var tableSel = document.getElementById('newOrderTable');
+    if (typeSel) {
+        function sync() {
+            var dineIn = typeSel.value === 'dine_in';
+            wrap.style.display = dineIn ? '' : 'none';
+            if (tableSel) tableSel.required = dineIn;
+        }
+        typeSel.addEventListener('change', sync);
+        sync();
+    }
+});
+</script>
+{% endblock js %}

@@ -15,6 +15,7 @@ urlpatterns = [
     path('', include('settings.urls')),
     path('', include('dining.urls')),
     path('', include('menu.urls')),
+    path('', include('orders.urls')),
 ]
 
 # sadece development ortamı için
