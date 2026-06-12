@@ -7,6 +7,7 @@ from django.utils.decorators import method_decorator
 from rest_framework import viewsets
 from rest_framework.decorators import action
 
+from authorizement.constants import Action, Perm
 from cafe.action_resolver import action_resolver, UserGenException
 from common.decorators import anahtar_auth
 from .models import Room, Table
@@ -21,7 +22,7 @@ from .qr import make_qr_png, safe_name
 # ---------------------------------------------------------------------------
 # Management pages
 # ---------------------------------------------------------------------------
-@anahtar_auth(perm="tables", action="view")
+@anahtar_auth(perm=Perm.TABLES, action=Action.VIEW)
 def room_table_list(request):
     rooms = Room.objects.prefetch_related('tables').order_by('list_index', 'name')
     context = {
@@ -32,7 +33,7 @@ def room_table_list(request):
     return render(request, 'dining/index.html', context)
 
 
-@anahtar_auth(perm="tables", action="view")
+@anahtar_auth(perm=Perm.TABLES, action=Action.VIEW)
 def room_layout_editor(request, pk):
     """Kuş bakışı yerleşim editörü (kanvas + sürükle-bırak masalar)."""
     room = get_object_or_404(Room, pk=pk)
@@ -62,7 +63,7 @@ def room_layout_editor(request, pk):
 # ---------------------------------------------------------------------------
 # QR kodları (Python ile üretim)
 # ---------------------------------------------------------------------------
-@anahtar_auth(perm="tables", action="view")
+@anahtar_auth(perm=Perm.TABLES, action=Action.VIEW)
 def table_qr_codes(request):
     """Masalara ait QR kodlarının (sunucu tarafı PNG) yazdırılabilir listesi."""
     rooms = (
@@ -73,7 +74,7 @@ def table_qr_codes(request):
     return render(request, 'dining/qr_codes.html', {'rooms': rooms})
 
 
-@anahtar_auth(perm="tables", action="view")
+@anahtar_auth(perm=Perm.TABLES, action=Action.VIEW)
 def table_qr_png(request, token):
     """Tek bir masanın QR kodunu PNG olarak döndürür (sayfada <img> ve önizleme için)."""
     table = get_object_or_404(Table, qr_token=token)
@@ -81,7 +82,7 @@ def table_qr_png(request, token):
     return HttpResponse(make_qr_png(url), content_type='image/png')
 
 
-@anahtar_auth(perm="tables", action="view")
+@anahtar_auth(perm=Perm.TABLES, action=Action.VIEW)
 def table_qr_zip(request):
     """Tüm aktif masaların QR kodlarını tek bir ZIP olarak indirir."""
     rooms = (
@@ -118,44 +119,39 @@ class RoomViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.ADD,
         redirect_default=True, redirect_url='tables',
         success_message="Salon başarıyla oluşturuldu!",
     ))
     def create_room(self, request, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'add'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Room.create_from_form(request.data)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.CHANGE,
         redirect_default=True, redirect_url='tables',
         success_message="Salon başarıyla güncellendi!",
     ))
     def update_room(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Room.update_from_form(self.get_object(), request.data)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.DELETE,
         redirect_default=True, redirect_url='tables',
         success_message="Salon başarıyla silindi!",
     ))
     def delete_room(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().delete()
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='room_layout',
+        perm=Perm.TABLES, action=Action.CHANGE,
         redirect_kwargs=lambda request, *a, **k: {'pk': k.get('pk')},
         success_message="Salon düzeni kaydedildi!",
     ))
     def save_layout(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'change'):
-            raise UserGenException("Düzeni değiştirme yetkiniz yok.")
-
         raw = request.data.get('layout')
         if not raw:
             raise UserGenException("Düzen verisi alınamadı.")
@@ -189,40 +185,36 @@ class TableViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.ADD,
         redirect_default=True, redirect_url='tables',
         success_message="Masa başarıyla oluşturuldu!",
     ))
     def create_table(self, request, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'add'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Table.create_from_form(request.data)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.CHANGE,
         redirect_default=True, redirect_url='tables',
         success_message="Masa başarıyla güncellendi!",
     ))
     def update_table(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Table.update_from_form(self.get_object(), request.data)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.DELETE,
         redirect_default=True, redirect_url='tables',
         success_message="Masa başarıyla silindi!",
     ))
     def delete_table(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().delete()
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.TABLES, action=Action.CHANGE,
         redirect_default=True, redirect_url='tables',
         success_message="Masa durumu güncellendi!",
     ))
     def set_status(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('tables', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().set_status(request.data.get('status'))

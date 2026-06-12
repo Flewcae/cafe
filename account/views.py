@@ -3,6 +3,7 @@ from django.contrib.auth import login, logout, authenticate
 from knox.models import AuthToken
 from account.models import User
 from account.serializers import UserSerializer
+from authorizement.constants import Action, Perm
 from authorizement.models import UserExtendedPermission
 from cafe.action_resolver import action_resolver, UserGenException
 from rest_framework import viewsets
@@ -138,6 +139,7 @@ class UserViewSet(viewsets.ModelViewSet):
     @method_decorator(
         action_resolver(
             redirect_default=True,
+            perm=Perm.AUTHORIZEMENT, action=Action.CHANGE,
             redirect_url='settings',
             success_message="Yetkiler başarıyla güncellendi!"
         )

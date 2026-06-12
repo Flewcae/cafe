@@ -5,7 +5,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, PermissionDenied
 
 def redirect_back_or_default(request, redirect_default= False, default_url_name = "home" , kwargs={}):
     referer = request.META.get("HTTP_REFERER")
@@ -54,11 +54,25 @@ def error_page(request, e):
 class UserGenException(Exception):
     pass
 
-
-
-
-def action_resolver(auth = True, redirect_url=None, redirect_default=False, redirect_kwargs=None, success_message="İşlem başarılı!", fallback_url=None, fallback_kwargs={}):
+def ext_perm_required(perm, action):
     def decorator(view_func):
+        @wraps(view_func)
+        def _wrapped_view(request, *args, **kwargs):
+            user = request.user
+            if perm and action:
+                if not user.has_ext_perm(perm, action):
+                    raise PermissionDenied
+            return view_func(request, *args, **kwargs)
+        return _wrapped_view
+    return decorator
+
+
+
+
+def action_resolver(auth = True, perm = None, action = None, redirect_url=None, redirect_default=False, redirect_kwargs=None, success_message="İşlem başarılı!", fallback_url=None, fallback_kwargs={}):
+    def decorator(view_func):
+        if perm and action:
+            view_func = ext_perm_required(perm=perm, action=action, view_func=view_func)
         if auth:
             view_func = login_required(view_func, login_url='/giris/')
         @wraps(view_func)

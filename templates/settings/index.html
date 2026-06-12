@@ -628,14 +628,14 @@
                                                                 <div>
                                                                     <p class="text-muted mb-0">{{ authorized.get_full_name }} kullanıcısının izinleri</p>
                                                                 </div>
-                                                                <button type="submit" form="permissions-form" class="btn btn-primary">
+                                                                <button type="submit" form="permissions-form-{{ authorized.id }}" class="btn btn-primary">
                                                                     <i class="fas fa-save me-2"></i>Değişiklikleri Kaydet
                                                                 </button>
                                                             </div>
 
                                                             <form method="post"
                                                                 action="{% url 'user-toggle-permission' authorized.id %}"
-                                                                id="permissions-form"
+                                                                id="permissions-form-{{ authorized.id }}"
                                                                 class="needs-validation"
                                                                 novalidate>
                                                                 {% csrf_token %}

@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
+from authorizement.constants import Action, Perm
 from cafe.action_resolver import action_resolver, UserGenException
 from common.decorators import anahtar_auth
 from dining.models import Room
@@ -20,7 +21,7 @@ def _ticket_kwargs_from_post(request, *a, **k):
 # ---------------------------------------------------------------------------
 # Screens
 # ---------------------------------------------------------------------------
-@anahtar_auth(perm="waiter", action="view")
+@anahtar_auth(perm=Perm.WAITER, action=Action.VIEW)
 def waiter_floor(request):
     """Kuş bakışı salon görünümü — masaya dokun, adisyon aç/gör."""
     rooms = list(
@@ -55,7 +56,7 @@ def waiter_floor(request):
     })
 
 
-@anahtar_auth(perm="waiter", action="view")
+@anahtar_auth(perm=Perm.WAITER, action=Action.VIEW)
 def waiter_ticket(request, pk):
     """Sipariş ekranı: menüden hızlı ekleme + adisyon kalemleri."""
     order = get_object_or_404(
@@ -76,11 +77,8 @@ def waiter_ticket(request, pk):
 # ---------------------------------------------------------------------------
 # Actions (form POST)
 # ---------------------------------------------------------------------------
-@action_resolver(redirect_default=True, redirect_url='waiter_floor')
+@action_resolver(perm=Perm.WAITER, action=Action.ADD, redirect_default=True, redirect_url='waiter_floor')
 def open_table_order(request):
-    if not request.user.has_ext_perm('waiter', 'add'):
-        raise UserGenException("Adisyon açma yetkiniz yok.")
-
     table_id = request.POST.get('table')
     if not table_id:
         raise UserGenException("Masa seçimi zorunludur.")
@@ -100,10 +98,8 @@ def open_table_order(request):
     return redirect('waiter_ticket', pk=order.id)
 
 
-@action_resolver(redirect_default=True, redirect_url='waiter_floor')
+@action_resolver(perm=Perm.WAITER, action=Action.ADD, redirect_default=True, redirect_url='waiter_floor')
 def create_takeaway(request):
-    if not request.user.has_ext_perm('waiter', 'add'):
-        raise UserGenException("Adisyon açma yetkiniz yok.")
     order = Order.create_from_form(
         {'order_type': Order.TYPE_TAKEAWAY, 'note': request.POST.get('note')},
         user=request.user,
@@ -115,10 +111,9 @@ def create_takeaway(request):
 @action_resolver(
     redirect_default=True, redirect_url='waiter_ticket',
     redirect_kwargs=_ticket_kwargs, success_message="Ürün eklendi!",
+    perm=Perm.WAITER, action=Action.ADD, 
 )
 def add_item(request, pk=None):
-    if not request.user.has_ext_perm('waiter', 'add'):
-        raise UserGenException("Ürün ekleme yetkiniz yok.")
     order = get_object_or_404(Order, pk=pk)
     order.add_item_from_form(request.POST)
 
@@ -126,10 +121,9 @@ def add_item(request, pk=None):
 @action_resolver(
     redirect_default=True, redirect_url='waiter_ticket',
     redirect_kwargs=_ticket_kwargs_from_post, success_message="Kalem güncellendi!",
+    perm=Perm.WAITER, action=Action.CHANGE, 
 )
 def update_item(request, pk=None):
-    if not request.user.has_ext_perm('waiter', 'change'):
-        raise UserGenException("Düzenleme yetkiniz yok.")
     item = get_object_or_404(OrderItem, pk=pk)
     item.update_from_form(request.POST)
 
@@ -137,10 +131,9 @@ def update_item(request, pk=None):
 @action_resolver(
     redirect_default=True, redirect_url='waiter_ticket',
     redirect_kwargs=_ticket_kwargs_from_post, success_message="Kalem kaldırıldı!",
+    perm=Perm.WAITER, action=Action.DELETE, 
 )
 def delete_item(request, pk=None):
-    if not request.user.has_ext_perm('waiter', 'change'):
-        raise UserGenException("Düzenleme yetkiniz yok.")
     item = get_object_or_404(OrderItem, pk=pk)
     if not item.order.is_open:
         raise UserGenException("Kapanmış bir adisyonun kalemi silinemez.")
@@ -150,10 +143,9 @@ def delete_item(request, pk=None):
 @action_resolver(
     redirect_default=True, redirect_url='waiter_ticket',
     redirect_kwargs=_ticket_kwargs, success_message="Sipariş mutfağa iletildi!",
+    perm=Perm.WAITER, action=Action.CHANGE, 
 )
 def send_to_kitchen(request, pk=None):
-    if not request.user.has_ext_perm('waiter', 'change'):
-        raise UserGenException("Bu işlem için yetkiniz yok.")
     order = get_object_or_404(Order, pk=pk)
     if not order.is_open:
         raise UserGenException("Kapanmış bir adisyon güncellenemez.")
@@ -168,10 +160,10 @@ def send_to_kitchen(request, pk=None):
 @action_resolver(
     redirect_default=True, redirect_url='waiter_ticket',
     redirect_kwargs=_ticket_kwargs, success_message="Sipariş servis edildi!",
+    perm=Perm.WAITER, action=Action.CHANGE, 
+
 )
 def mark_served(request, pk=None):
-    if not request.user.has_ext_perm('waiter', 'change'):
-        raise UserGenException("Bu işlem için yetkiniz yok.")
     order = get_object_or_404(Order, pk=pk)
     if not order.is_open:
         raise UserGenException("Kapanmış bir adisyon güncellenemez.")

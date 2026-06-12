@@ -3,6 +3,7 @@ from django.utils.decorators import method_decorator
 from rest_framework import viewsets
 from rest_framework.decorators import action
 
+from authorizement.constants import Action, Perm
 from cafe.action_resolver import action_resolver, UserGenException
 from common.decorators import anahtar_auth
 from dining.models import Room, Table
@@ -18,7 +19,7 @@ def _detail_kwargs(request, *a, **k):
 # ---------------------------------------------------------------------------
 # Management pages
 # ---------------------------------------------------------------------------
-@anahtar_auth(perm="orders", action="view")
+@anahtar_auth(perm=Perm.ORDERS, action=Action.VIEW)
 def order_list(request):
     """Açık adisyonlar + kapanmış son siparişler."""
     open_orders = (
@@ -46,7 +47,7 @@ def order_list(request):
     return render(request, 'orders/index.html', context)
 
 
-@anahtar_auth(perm="orders", action="view")
+@anahtar_auth(perm=Perm.ORDERS, action=Action.VIEW)
 def order_detail(request, pk):
     """POS ekranı: menüden ürün ekle, kalemleri yönet, ödeme al."""
     order = get_object_or_404(
@@ -81,10 +82,9 @@ class OrderViewSet(viewsets.ModelViewSet):
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='orders',
         success_message="Adisyon açıldı!",
+        perm=Perm.ORDERS, action=Action.ADD
     ))
     def create_order(self, request, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'add'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Order.create_from_form(request.data, user=request.user)
 
     @action(detail=True, methods=['post'])
@@ -92,30 +92,28 @@ class OrderViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='order_detail',
         redirect_kwargs=_detail_kwargs,
         success_message="Sipariş durumu güncellendi!",
+        perm=Perm.ORDERS, action=Action.CHANGE
     ))
     def set_status(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().set_status(request.data.get('status'))
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='orders',
         success_message="Adisyon iptal edildi!",
+        perm=Perm.ORDERS, action=Action.CHANGE
+
     ))
     def cancel_order(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().cancel()
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='orders',
         success_message="Adisyon silindi!",
+        perm=Perm.ORDERS, action=Action.DELETE
     ))
     def delete_order(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         order = self.get_object()
         order.delete()
         order._release_table_if_free()
@@ -126,10 +124,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='order_detail',
         redirect_kwargs=_detail_kwargs,
         success_message="Ürün adisyona eklendi!",
+        perm=Perm.ORDERS, action=Action.CHANGE
     ))
     def add_item(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().add_item_from_form(request.data)
 
     # --- Ödeme ------------------------------------------------------------
@@ -138,10 +135,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='order_detail',
         redirect_kwargs=_detail_kwargs,
         success_message="Ödeme alındı!",
+        perm=Perm.ORDERS, action=Action.CHANGE
     ))
     def add_payment(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().add_payment_from_form(request.data, user=request.user)
 
 
@@ -157,10 +153,9 @@ class OrderItemViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='order_detail',
         redirect_kwargs=lambda request, *a, **k: {'pk': request.POST.get('order')},
         success_message="Kalem güncellendi!",
+        perm=Perm.ORDERS, action=Action.CHANGE
     ))
     def update_item(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().update_from_form(request.data)
 
     @action(detail=True, methods=['post'])
@@ -168,10 +163,9 @@ class OrderItemViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='order_detail',
         redirect_kwargs=lambda request, *a, **k: {'pk': request.POST.get('order')},
         success_message="Kalem kaldırıldı!",
+        perm=Perm.ORDERS, action=Action.CHANGE
     ))
     def delete_item(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         item = self.get_object()
         if not item.order.is_open:
             raise UserGenException("Kapanmış bir adisyonun kalemi silinemez.")
@@ -190,8 +184,7 @@ class ReceiptViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='order_detail',
         redirect_kwargs=lambda request, *a, **k: {'pk': request.POST.get('order')},
         success_message="Ödeme kaydı silindi!",
+        perm=Perm.ORDERS, action=Action.DELETE
     ))
     def delete_receipt(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('orders', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().delete()

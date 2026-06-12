@@ -4,6 +4,7 @@ from django.utils.decorators import method_decorator
 from rest_framework import viewsets
 from rest_framework.decorators import action
 
+from authorizement.constants import Action, Perm
 from cafe.action_resolver import action_resolver, UserGenException
 from common.decorators import anahtar_auth
 from .models import Category, Product, Menu
@@ -13,7 +14,7 @@ from .serializers import CategorySerializer, ProductSerializer, MenuSerializer
 # ---------------------------------------------------------------------------
 # Management pages
 # ---------------------------------------------------------------------------
-@anahtar_auth(perm="menu", action="view")
+@anahtar_auth(perm=Perm.MENU, action=Action.VIEW)
 def menu_management(request):
     categories = Category.objects.prefetch_related('products').order_by('list_index', 'name')
     menus = (
@@ -28,7 +29,7 @@ def menu_management(request):
     return render(request, 'menu/index.html', context)
 
 
-@anahtar_auth(perm="menu", action="view")
+@anahtar_auth(perm=Perm.MENU, action=Action.VIEW)
 def menu_builder(request, pk):
     """Bir menüye hangi ürünlerin dâhil olacağını seçme ekranı."""
     menu = get_object_or_404(Menu, pk=pk)
@@ -53,32 +54,29 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'])
     @method_decorator(action_resolver(
+        perm=Perm.MENU, action=Action.ADD,
         redirect_default=True, redirect_url='menu_management',
         success_message="Kategori başarıyla oluşturuldu!",
     ))
     def create_category(self, request, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'add'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Category.create_from_form(request.data, request.FILES)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Kategori başarıyla güncellendi!",
+        perm=Perm.MENU, action=Action.CHANGE,
     ))
     def update_category(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Category.update_from_form(self.get_object(), request.data, request.FILES)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Kategori başarıyla silindi!",
+        perm=Perm.MENU, action=Action.DELETE,
     ))
     def delete_category(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().delete()
 
 
@@ -93,40 +91,37 @@ class ProductViewSet(viewsets.ModelViewSet):
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Ürün başarıyla oluşturuldu!",
+        perm=Perm.MENU, action=Action.ADD,
+
     ))
     def create_product(self, request, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'add'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Product.create_from_form(request.data, request.FILES)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Ürün başarıyla güncellendi!",
+        perm=Perm.MENU, action=Action.CHANGE,
     ))
     def update_product(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Product.update_from_form(self.get_object(), request.data, request.FILES)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Ürün başarıyla silindi!",
+        perm=Perm.MENU, action=Action.DELETE,
     ))
     def delete_product(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().delete()
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Ürün durumu güncellendi!",
+        perm=Perm.MENU, action=Action.CHANGE,
     ))
     def toggle_availability(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().toggle_availability()
 
 
@@ -141,30 +136,27 @@ class MenuViewSet(viewsets.ModelViewSet):
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Menü başarıyla oluşturuldu!",
+        perm=Perm.MENU, action=Action.ADD,
     ))
     def create_menu(self, request, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'add'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Menu.create_from_form(request.data)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Menü başarıyla güncellendi!",
+        perm=Perm.MENU, action=Action.CHANGE,
     ))
     def update_menu(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'change'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         Menu.update_from_form(self.get_object(), request.data)
 
     @action(detail=True, methods=['post'])
     @method_decorator(action_resolver(
         redirect_default=True, redirect_url='menu_management',
         success_message="Menü başarıyla silindi!",
+        perm=Perm.MENU, action=Action.DELETE,
     ))
     def delete_menu(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'delete'):
-            raise UserGenException("Bu işlem için yetkiniz yok.")
         self.get_object().delete()
 
     @action(detail=True, methods=['post'])
@@ -172,10 +164,9 @@ class MenuViewSet(viewsets.ModelViewSet):
         redirect_default=True, redirect_url='menu_builder',
         redirect_kwargs=lambda request, *a, **k: {'pk': k.get('pk')},
         success_message="Menü içeriği kaydedildi!",
+        perm=Perm.MENU, action=Action.CHANGE,
     ))
     def save_items(self, request, pk=None, *args, **kwargs):
-        if not request.user.has_ext_perm('menu', 'change'):
-            raise UserGenException("Menü içeriğini değiştirme yetkiniz yok.")
         menu = self.get_object()
         with transaction.atomic():
             menu.set_products(request.data)
