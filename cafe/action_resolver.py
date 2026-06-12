@@ -72,7 +72,10 @@ def ext_perm_required(perm, action):
 def action_resolver(auth = True, perm = None, action = None, redirect_url=None, redirect_default=False, redirect_kwargs=None, success_message="İşlem başarılı!", fallback_url=None, fallback_kwargs={}):
     def decorator(view_func):
         if perm and action:
-            view_func = ext_perm_required(perm=perm, action=action, view_func=view_func)
+            view_func = ext_perm_required(
+                perm=perm,
+                action=action
+            )(view_func)
         if auth:
             view_func = login_required(view_func, login_url='/giris/')
         @wraps(view_func)

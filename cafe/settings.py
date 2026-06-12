@@ -19,10 +19,11 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     # 'django_components',
-    "channels",
     "corsheaders",
     'rest_framework',
     'knox',
+    'strawberry_django',
+    "channels",
     'account',
     'authorizement',
     'province',
@@ -35,6 +36,7 @@ INSTALLED_APPS = [
     'settings',
 ]
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -44,6 +46,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 ROOT_URLCONF = 'cafe.urls'
+CORS_ALLOW_ALL_ORIGINS = True 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -60,6 +63,10 @@ TEMPLATES = [
     },
 ]
 WSGI_APPLICATION = 'cafe.wsgi.application'
+ASGI_APPLICATION = 'cafe.asgi.application'
+CHANNEL_LAYERS = {
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"},
+}
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
