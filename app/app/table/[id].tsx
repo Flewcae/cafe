@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,262 +12,166 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ArrowLeft, Plus, Minus, ChefHat, CheckCircle, Trash2, CreditCard, RefreshCw, Users, X } from 'lucide-react-native';
-import { Table, TableDetail, Order, Category, OrderItem } from '@/types/api';
-import { useAuth } from '@/contexts/AuthContext';
+import { useQuery, useSubscription, useMutation } from '@apollo/client';
+import {
+  ArrowLeft,
+  Plus,
+  Minus,
+  ChefHat,
+  CreditCard,
+  Trash2,
+  RefreshCw,
+  Users,
+  X,
+} from 'lucide-react-native';
+import { TABLE_DETAIL } from '@/graphql/queries';
+import { ORDER_UPDATES } from '@/graphql/subscriptions';
+import {
+  OPEN_TABLE_ORDER,
+  ADD_ORDER_ITEM,
+  UPDATE_ORDER_ITEM,
+  DELETE_ORDER_ITEM,
+  SEND_TO_KITCHEN,
+  ADD_PAYMENT,
+} from '@/graphql/mutations';
+import {
+  TableDetailResult,
+  TableDetailVars,
+  OrderUpdatesResult,
+  OrderUpdatesVars,
+  OpenTableOrderResult,
+  OpenTableOrderVars,
+  AddOrderItemResult,
+  AddOrderItemVars,
+  UpdateOrderItemResult,
+  UpdateOrderItemVars,
+  DeleteOrderItemResult,
+  DeleteOrderItemVars,
+  SendToKitchenResult,
+  SendToKitchenVars,
+  AddPaymentResult,
+  AddPaymentVars,
+} from '@/graphql/generated/operations';
+import { errorMessage } from '@/graphql/client/errors';
+import { statusHex } from '@/theme/statusColors';
+import { Category, Product } from '@/types/api';
 
-// Demo data
-const DEMO_TABLES: Record<string, { table: Table; openOrder: Order | null }> = {
-  't1': {
-    table: { id: 't1', name: 'M1', capacity: 4, status: 'available', statusDisplay: 'Uygun', statusColor: '#22c55e', shape: 'square', shapeDisplay: 'Kare', isActive: true, posX: 50, posY: 50, width: 80, height: 80, rotation: 0, qrToken: 'qr1', hasOpenOrder: false, openOrderId: null },
-    openOrder: null,
-  },
-  't2': {
-    table: { id: 't2', name: 'M2', capacity: 2, status: 'occupied', statusDisplay: 'Dolu', statusColor: '#f59e0b', shape: 'round', shapeDisplay: 'Yuvarlak', isActive: true, posX: 180, posY: 50, width: 70, height: 70, rotation: 0, qrToken: 'qr2', hasOpenOrder: true, openOrderId: 'o1' },
-    openOrder: {
-      id: 'o1',
-      code: 'AD-001',
-      orderType: 'table',
-      typeDisplay: 'Masa',
-      status: 'open',
-      statusDisplay: 'Acik',
-      statusColor: '#94a3b8',
-      isOpen: true,
-      note: null,
-      tableId: 't2',
-      tableName: 'M2',
-      itemCount: 3,
-      subtotal: '145.00',
-      total: '145.00',
-      totalPaid: '50.00',
-      balance: '95.00',
-      isFullyPaid: false,
-      createdAt: new Date().toISOString(),
-      items: [
-        { id: 'i1', productId: 'p1', name: 'Izgara Tavuk', unitPrice: '85.00', quantity: 1, note: 'Az baharatli', status: 'pending', statusDisplay: 'Bekliyor', statusColor: '#94a3b8', lineTotal: '85.00' },
-        { id: 'i2', productId: 'p2', name: 'Sezar Salata', unitPrice: '45.00', quantity: 1, note: null, status: 'pending', statusDisplay: 'Bekliyor', statusColor: '#94a3b8', lineTotal: '45.00' },
-        { id: 'i3', productId: 'p3', name: 'Cola', unitPrice: '15.00', quantity: 1, note: null, status: 'pending', statusDisplay: 'Bekliyor', statusColor: '#94a3b8', lineTotal: '15.00' },
-      ],
-      receipts: [],
-    },
-  },
-};
-
-const DEMO_MENU: Category[] = [
-  {
-    id: 'c1',
-    name: 'Ana Yemekler',
-    description: 'Ana yemek secenekleri',
-    products: [
-      { id: 'p1', name: 'Izgara Tavuk', description: 'Firinda pisirilmis tavuk', price: '85.00', imageUrl: null, preparationTime: 20, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-      { id: 'p4', name: 'Karides Guvec', description: 'Ozel sosla karides', price: '95.00', imageUrl: null, preparationTime: 25, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-      { id: 'p5', name: 'Kofte Tabagi', description: 'Ev yapimi kofte', price: '75.00', imageUrl: null, preparationTime: 15, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-    ],
-  },
-  {
-    id: 'c2',
-    name: 'Salatalar',
-    description: 'Taze salatalar',
-    products: [
-      { id: 'p2', name: 'Sezar Salata', description: 'Klasik sezar', price: '45.00', imageUrl: null, preparationTime: 10, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-      { id: 'p6', name: 'Coban Salata', description: 'Geleneksel coban', price: '35.00', imageUrl: null, preparationTime: 5, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-    ],
-  },
-  {
-    id: 'c3',
-    name: 'Icecekler',
-    description: 'Soguk ve sicak icecekler',
-    products: [
-      { id: 'p3', name: 'Cola', description: '330ml', price: '15.00', imageUrl: null, preparationTime: 1, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-      { id: 'p7', name: 'Ayran', description: 'Ev yapimi', price: '25.00', imageUrl: null, preparationTime: 2, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-      { id: 'p8', name: 'Turk Kahvesi', description: 'Geleneksel', price: '35.00', imageUrl: null, preparationTime: 5, isActive: true, isAvailable: true, statusColor: '#22c55e', statusLabel: 'Mevcut' },
-    ],
-  },
+// Backend Receipt.METHOD_CHOICES: cash | card | other
+const PAYMENT_METHODS: { key: string; label: string }[] = [
+  { key: 'cash', label: 'Nakit' },
+  { key: 'card', label: 'Kart' },
+  { key: 'other', label: 'Diğer' },
 ];
 
 export default function TableScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useAuth();
   const router = useRouter();
-  const [tableData, setTableData] = useState<{ table: Table; openOrder: Order | null } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+
   const [showMenuModal, setShowMenuModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const data = DEMO_TABLES[id || ''];
-    setTableData(data || null);
-    setIsLoading(false);
-  }, [id]);
+  const { data, loading, error, refetch } = useQuery<TableDetailResult, TableDetailVars>(
+    TABLE_DETAIL,
+    {
+      variables: { tableId: id ?? '' },
+      skip: !id,
+      fetchPolicy: 'cache-and-network',
+      errorPolicy: 'all',
+    }
+  );
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1000);
+  const queryOrder = data?.tableDetail?.openOrder ?? null;
+  const subOrderId = queryOrder?.id ?? '';
+
+  const { data: subData } = useSubscription<OrderUpdatesResult, OrderUpdatesVars>(ORDER_UPDATES, {
+    variables: { orderId: subOrderId },
+    skip: !subOrderId,
+  });
+
+  const table = data?.tableDetail?.table ?? null;
+  const menu = data?.tableDetail?.menu ?? [];
+  const openOrder = subData?.orderUpdates ?? queryOrder;
+
+  const [openTableOrder] = useMutation<OpenTableOrderResult, OpenTableOrderVars>(OPEN_TABLE_ORDER);
+  const [addOrderItem] = useMutation<AddOrderItemResult, AddOrderItemVars>(ADD_ORDER_ITEM);
+  const [updateOrderItem] = useMutation<UpdateOrderItemResult, UpdateOrderItemVars>(UPDATE_ORDER_ITEM);
+  const [deleteOrderItem] = useMutation<DeleteOrderItemResult, DeleteOrderItemVars>(DELETE_ORDER_ITEM);
+  const [sendToKitchen] = useMutation<SendToKitchenResult, SendToKitchenVars>(SEND_TO_KITCHEN);
+  const [addPayment] = useMutation<AddPaymentResult, AddPaymentVars>(ADD_PAYMENT);
+
+  const run = async (fn: () => Promise<unknown>, fallback: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      await refetch();
+      return true;
+    } catch (err) {
+      Alert.alert('Hata', errorMessage(err, fallback));
+      return false;
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const handleOpenOrder = () => {
-    const newOrder: Order = {
-      id: 'o-new',
-      code: 'AD-' + Math.random().toString(36).substr(2, 4).toUpperCase(),
-      orderType: 'table',
-      typeDisplay: 'Masa',
-      status: 'open',
-      statusDisplay: 'Acik',
-      statusColor: '#94a3b8',
-      isOpen: true,
-      note: null,
-      tableId: id,
-      tableName: tableData?.table.name || '',
-      itemCount: 0,
-      subtotal: '0.00',
-      total: '0.00',
-      totalPaid: '0.00',
-      balance: '0.00',
-      isFullyPaid: true,
-      createdAt: new Date().toISOString(),
-      items: [],
-      receipts: [],
-    };
-    setTableData(prev => prev ? { ...prev, openOrder: newOrder } : null);
-  };
+  const handleOpenOrder = () =>
+    run(() => openTableOrder({ variables: { tableId: id ?? '' } }), 'Adisyon açılamadı.');
 
-  const handleAddItem = (product: { id: string; name: string; price: string }) => {
-    if (!tableData?.openOrder) return;
-    const newItem: OrderItem = {
-      id: 'i-' + Date.now(),
-      productId: product.id,
-      name: product.name,
-      unitPrice: product.price,
-      quantity: 1,
-      note: null,
-      status: 'pending',
-      statusDisplay: 'Bekliyor',
-      statusColor: '#94a3b8',
-      lineTotal: product.price,
-    };
-    const updatedItems = [...tableData.openOrder.items, newItem];
-    const subtotal = updatedItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
-    setTableData(prev => {
-      if (!prev || !prev.openOrder) return prev;
-      return {
-        ...prev,
-        openOrder: {
-          ...prev.openOrder,
-          items: updatedItems,
-          itemCount: updatedItems.length,
-          subtotal: subtotal.toFixed(2),
-          total: subtotal.toFixed(2),
-          balance: (subtotal - parseFloat(prev.openOrder.totalPaid)).toFixed(2),
-          isFullyPaid: subtotal <= parseFloat(prev.openOrder.totalPaid),
-        },
-      };
-    });
+  const handleAddItem = async (product: Product) => {
+    if (!openOrder) return;
     setShowMenuModal(false);
     setSelectedCategory(null);
+    await run(
+      () =>
+        addOrderItem({
+          variables: { orderId: openOrder.id, productId: product.id, quantity: 1 },
+        }),
+      'Ürün eklenemedi.'
+    );
   };
 
-  const handleUpdateQuantity = (itemId: string, delta: number) => {
-    if (!tableData?.openOrder) return;
-    const updatedItems = tableData.openOrder.items.map(item => {
-      if (item.id === itemId) {
-        const newQty = Math.max(1, item.quantity + delta);
-        return {
-          ...item,
-          quantity: newQty,
-          lineTotal: (parseFloat(item.unitPrice) * newQty).toFixed(2),
-        };
-      }
-      return item;
-    });
-    const subtotal = updatedItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
-    setTableData(prev => {
-      if (!prev || !prev.openOrder) return prev;
-      return {
-        ...prev,
-        openOrder: {
-          ...prev.openOrder,
-          items: updatedItems,
-          subtotal: subtotal.toFixed(2),
-          total: subtotal.toFixed(2),
-          balance: (subtotal - parseFloat(prev.openOrder.totalPaid)).toFixed(2),
-          isFullyPaid: subtotal <= parseFloat(prev.openOrder.totalPaid),
-        },
-      };
-    });
+  const handleUpdateQuantity = (itemId: string, current: number, delta: number) => {
+    const next = Math.max(1, current + delta);
+    if (next === current) return;
+    run(() => updateOrderItem({ variables: { itemId, quantity: next } }), 'Adet güncellenemedi.');
   };
 
-  const handleDeleteItem = (itemId: string) => {
-    if (!tableData?.openOrder) return;
-    const updatedItems = tableData.openOrder.items.filter(item => item.id !== itemId);
-    const subtotal = updatedItems.reduce((sum, item) => sum + parseFloat(item.lineTotal), 0);
-    setTableData(prev => {
-      if (!prev || !prev.openOrder) return prev;
-      return {
-        ...prev,
-        openOrder: {
-          ...prev.openOrder,
-          items: updatedItems,
-          itemCount: updatedItems.length,
-          subtotal: subtotal.toFixed(2),
-          total: subtotal.toFixed(2),
-          balance: (subtotal - parseFloat(prev.openOrder.totalPaid)).toFixed(2),
-          isFullyPaid: subtotal <= parseFloat(prev.openOrder.totalPaid),
-        },
-      };
-    });
-  };
+  const handleDeleteItem = (itemId: string) =>
+    run(() => deleteOrderItem({ variables: { itemId } }), 'Kalem silinemedi.');
 
   const handleSendToKitchen = () => {
-    if (!tableData?.openOrder) return;
-    const updatedItems = tableData.openOrder.items.map(item => ({
-      ...item,
-      status: 'preparing',
-      statusDisplay: 'Hazirlaniyor',
-      statusColor: '#f59e0b',
-    }));
-    setTableData(prev => {
-      if (!prev || !prev.openOrder) return prev;
-      return {
-        ...prev,
-        openOrder: {
-          ...prev.openOrder,
-          status: 'preparing',
-          statusDisplay: 'Hazirlaniyor',
-          statusColor: '#f59e0b',
-          items: updatedItems,
-        },
-      };
-    });
-    Alert.alert('Basarili', 'Siparis mutfağa gonderildi.');
+    if (!openOrder) return;
+    run(() => sendToKitchen({ variables: { orderId: openOrder.id } }), 'Mutfağa gönderilemedi.');
   };
 
-  const handleAddPayment = () => {
-    if (!tableData?.openOrder || !paymentAmount) return;
-    const amount = parseFloat(paymentAmount);
-    if (isNaN(amount) || amount <= 0) return;
-    const newTotalPaid = parseFloat(tableData.openOrder.totalPaid) + amount;
-    const newBalance = parseFloat(tableData.openOrder.total) - newTotalPaid;
-    setTableData(prev => {
-      if (!prev || !prev.openOrder) return prev;
-      return {
-        ...prev,
-        openOrder: {
-          ...prev.openOrder,
-          totalPaid: newTotalPaid.toFixed(2),
-          balance: Math.max(0, newBalance).toFixed(2),
-          isFullyPaid: newBalance <= 0,
-        },
-      };
-    });
-    setShowPaymentModal(false);
-    setPaymentAmount('');
+  const handleAddPayment = async () => {
+    if (!openOrder) return;
+    const amount = parseFloat(paymentAmount.replace(',', '.'));
+    if (isNaN(amount) || amount <= 0) {
+      Alert.alert('Hata', 'Geçerli bir tutar girin.');
+      return;
+    }
+    const ok = await run(
+      () =>
+        addPayment({
+          variables: {
+            orderId: openOrder.id,
+            amount: amount.toFixed(2), // Decimal -> string
+            method: paymentMethod,
+          },
+        }),
+      'Ödeme alınamadı.'
+    );
+    if (ok) {
+      setShowPaymentModal(false);
+      setPaymentAmount('');
+    }
   };
 
-  if (isLoading) {
+  if (loading && !table) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#0891b2" />
@@ -275,10 +179,10 @@ export default function TableScreen() {
     );
   }
 
-  if (!tableData) {
+  if (!table) {
     return (
       <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>Masa bulunamadi</Text>
+        <Text style={styles.errorText}>{error ? 'Masa yüklenemedi' : 'Masa bulunamadı'}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <ArrowLeft color="#0891b2" size={20} />
           <Text style={styles.backText}>Geri</Text>
@@ -287,8 +191,7 @@ export default function TableScreen() {
     );
   }
 
-  const { table, openOrder } = tableData;
-  const hasPendingItems = openOrder?.items.some(i => i.status === 'pending');
+  const hasPendingItems = openOrder?.items.some((i) => i.status === 'pending');
 
   return (
     <View style={styles.container}>
@@ -300,10 +203,10 @@ export default function TableScreen() {
           <Text style={styles.headerTitle}>Masa {table.name}</Text>
           <View style={styles.tableInfo}>
             <Users color="#94a3b8" size={14} />
-            <Text style={styles.headerSubtitle}>{table.capacity} Kisi</Text>
+            <Text style={styles.headerSubtitle}>{table.capacity} Kişi</Text>
           </View>
         </View>
-        <TouchableOpacity onPress={onRefresh}>
+        <TouchableOpacity onPress={() => refetch()}>
           <RefreshCw color="#0891b2" size={24} />
         </TouchableOpacity>
       </View>
@@ -311,38 +214,63 @@ export default function TableScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0891b2" />}
+        refreshControl={
+          <RefreshControl refreshing={loading} onRefresh={() => refetch()} tintColor="#0891b2" />
+        }
       >
         {!openOrder ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyTitle}>Aktif Adisyon Yok</Text>
-            <Text style={styles.emptySubtitle}>Bu masada acik adisyon bulunmuyor.</Text>
-            <TouchableOpacity style={styles.openOrderButton} onPress={handleOpenOrder}>
-              <Plus color="#ffffff" size={20} />
-              <Text style={styles.openOrderText}>Yeni Adisyon Ac</Text>
+            <Text style={styles.emptySubtitle}>Bu masada açık adisyon bulunmuyor.</Text>
+            <TouchableOpacity
+              style={[styles.openOrderButton, busy && styles.disabled]}
+              onPress={handleOpenOrder}
+              disabled={busy}
+            >
+              {busy ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <>
+                  <Plus color="#ffffff" size={20} />
+                  <Text style={styles.openOrderText}>Yeni Adisyon Aç</Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         ) : (
           <>
             <View style={styles.orderHeader}>
               <Text style={styles.orderCode}>{openOrder.code}</Text>
-              <Text style={styles.orderStatus}>{openOrder.statusDisplay} - {openOrder.itemCount} Kalem</Text>
+              <Text style={styles.orderStatus}>
+                {openOrder.statusDisplay} - {openOrder.itemCount} Kalem
+              </Text>
             </View>
 
             <View style={styles.itemsSection}>
-              <Text style={styles.sectionTitle}>Siparisler</Text>
+              <Text style={styles.sectionTitle}>Siparişler</Text>
               {openOrder.items.length === 0 ? (
-                <Text style={styles.emptyText}>Henüz siparis eklenmedi.</Text>
+                <Text style={styles.emptyText}>Henüz sipariş eklenmedi.</Text>
               ) : (
                 openOrder.items.map((item) => (
-                  <View key={item.id} style={[styles.itemCard, { borderLeftColor: item.statusColor }]}>
+                  <View
+                    key={item.id}
+                    style={[styles.itemCard, { borderLeftColor: statusHex(item.statusColor) }]}
+                  >
                     <View style={styles.itemMain}>
                       <View style={styles.quantityControls}>
-                        <TouchableOpacity style={styles.quantityBtn} onPress={() => handleUpdateQuantity(item.id, -1)}>
+                        <TouchableOpacity
+                          style={styles.quantityBtn}
+                          disabled={busy}
+                          onPress={() => handleUpdateQuantity(item.id, item.quantity, -1)}
+                        >
                           <Minus color="#64748b" size={14} />
                         </TouchableOpacity>
                         <Text style={styles.itemQuantity}>{item.quantity}</Text>
-                        <TouchableOpacity style={styles.quantityBtn} onPress={() => handleUpdateQuantity(item.id, 1)}>
+                        <TouchableOpacity
+                          style={styles.quantityBtn}
+                          disabled={busy}
+                          onPress={() => handleUpdateQuantity(item.id, item.quantity, 1)}
+                        >
                           <Plus color="#64748b" size={14} />
                         </TouchableOpacity>
                       </View>
@@ -352,7 +280,11 @@ export default function TableScreen() {
                       </View>
                       <View style={styles.itemActions}>
                         <Text style={styles.itemTotal}>{item.lineTotal} TL</Text>
-                        <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDeleteItem(item.id)}>
+                        <TouchableOpacity
+                          style={styles.deleteBtn}
+                          disabled={busy}
+                          onPress={() => handleDeleteItem(item.id)}
+                        >
                           <Trash2 color="#f87171" size={16} />
                         </TouchableOpacity>
                       </View>
@@ -363,7 +295,11 @@ export default function TableScreen() {
               )}
             </View>
 
-            <TouchableOpacity style={styles.addMenuItem} onPress={() => setShowMenuModal(true)}>
+            <TouchableOpacity
+              style={styles.addMenuItem}
+              onPress={() => setShowMenuModal(true)}
+              disabled={busy}
+            >
               <Plus color="#0891b2" size={20} />
               <Text style={styles.addMenuText}>Menüden Ekle</Text>
             </TouchableOpacity>
@@ -378,13 +314,13 @@ export default function TableScreen() {
                 <Text style={styles.totalValueBold}>{openOrder.total} TL</Text>
               </View>
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Odenen</Text>
+                <Text style={styles.totalLabel}>Ödenen</Text>
                 <Text style={[styles.totalValue, { color: '#22c55e' }]}>{openOrder.totalPaid} TL</Text>
               </View>
               <View style={[styles.totalRow, styles.balanceRow]}>
                 <Text style={styles.balanceLabel}>Bakiye</Text>
                 <Text style={[styles.balanceValue, openOrder.isFullyPaid ? styles.paid : styles.unpaid]}>
-                  {openOrder.isFullyPaid ? 'Odendi' : `${openOrder.balance} TL`}
+                  {openOrder.isFullyPaid ? 'Ödendi' : `${openOrder.balance} TL`}
                 </Text>
               </View>
             </View>
@@ -395,35 +331,56 @@ export default function TableScreen() {
       {openOrder && (
         <View style={styles.actionBar}>
           {hasPendingItems && (
-            <TouchableOpacity style={styles.actionButton} onPress={handleSendToKitchen}>
+            <TouchableOpacity
+              style={[styles.actionButton, busy && styles.disabled]}
+              onPress={handleSendToKitchen}
+              disabled={busy}
+            >
               <ChefHat color="#ffffff" size={20} />
-              <Text style={styles.actionButtonText}>Mutfağa Gonder</Text>
+              <Text style={styles.actionButtonText}>Mutfağa Gönder</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={[styles.actionButton, styles.paymentButton]} onPress={() => setShowPaymentModal(true)}>
+          <TouchableOpacity
+            style={[styles.actionButton, styles.paymentButton, busy && styles.disabled]}
+            onPress={() => setShowPaymentModal(true)}
+            disabled={busy}
+          >
             <CreditCard color="#ffffff" size={20} />
-            <Text style={styles.actionButtonText}>Odeme Al</Text>
+            <Text style={styles.actionButtonText}>Ödeme Al</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Menu Modal */}
+      {/* Menü Modalı */}
       <Modal visible={showMenuModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Menü</Text>
-            <TouchableOpacity onPress={() => { setShowMenuModal(false); setSelectedCategory(null); }}>
+            <TouchableOpacity
+              onPress={() => {
+                setShowMenuModal(false);
+                setSelectedCategory(null);
+              }}
+            >
               <X color="#94a3b8" size={24} />
             </TouchableOpacity>
           </View>
           <ScrollView style={styles.modalContent}>
             {!selectedCategory ? (
-              DEMO_MENU.map((category) => (
-                <TouchableOpacity key={category.id} style={styles.categoryCard} onPress={() => setSelectedCategory(category)}>
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                  <Text style={styles.categoryCount}>{category.products.length} Ürün</Text>
-                </TouchableOpacity>
-              ))
+              menu.length === 0 ? (
+                <Text style={styles.emptyText}>Menü boş.</Text>
+              ) : (
+                menu.map((category) => (
+                  <TouchableOpacity
+                    key={category.id}
+                    style={styles.categoryCard}
+                    onPress={() => setSelectedCategory(category)}
+                  >
+                    <Text style={styles.categoryName}>{category.name}</Text>
+                    <Text style={styles.categoryCount}>{category.products.length} Ürün</Text>
+                  </TouchableOpacity>
+                ))
+              )
             ) : (
               <>
                 <TouchableOpacity style={styles.backCategory} onPress={() => setSelectedCategory(null)}>
@@ -432,10 +389,17 @@ export default function TableScreen() {
                 </TouchableOpacity>
                 <Text style={styles.selectedCategoryTitle}>{selectedCategory.name}</Text>
                 {selectedCategory.products.map((product) => (
-                  <TouchableOpacity key={product.id} style={styles.productCard} onPress={() => handleAddItem(product)}>
+                  <TouchableOpacity
+                    key={product.id}
+                    style={[styles.productCard, !product.isAvailable && styles.disabled]}
+                    disabled={!product.isAvailable || busy}
+                    onPress={() => handleAddItem(product)}
+                  >
                     <View style={styles.productInfo}>
                       <Text style={styles.productName}>{product.name}</Text>
-                      <Text style={styles.productPrice}>{product.price} TL</Text>
+                      <Text style={styles.productPrice}>
+                        {product.price} TL{!product.isAvailable ? ` · ${product.statusLabel}` : ''}
+                      </Text>
                     </View>
                     <View style={styles.addProductBtn}>
                       <Plus color="#ffffff" size={16} />
@@ -448,11 +412,11 @@ export default function TableScreen() {
         </View>
       </Modal>
 
-      {/* Payment Modal */}
+      {/* Ödeme Modalı */}
       <Modal visible={showPaymentModal} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Odeme Al</Text>
+            <Text style={styles.modalTitle}>Ödeme Al</Text>
             <TouchableOpacity onPress={() => setShowPaymentModal(false)}>
               <X color="#94a3b8" size={24} />
             </TouchableOpacity>
@@ -464,7 +428,7 @@ export default function TableScreen() {
               <Text style={styles.paymentLabel}>Kalan Bakiye</Text>
               <Text style={styles.paymentBalance}>{openOrder?.balance} TL</Text>
             </View>
-            <Text style={styles.inputLabel}>Odeme Tutari</Text>
+            <Text style={styles.inputLabel}>Ödeme Tutarı</Text>
             <TextInput
               style={styles.paymentInput}
               value={paymentAmount}
@@ -473,22 +437,35 @@ export default function TableScreen() {
               placeholder="0.00"
               placeholderTextColor="#64748b"
             />
-            <Text style={styles.inputLabel}>Odeme Yontemi</Text>
+            <Text style={styles.inputLabel}>Ödeme Yöntemi</Text>
             <View style={styles.methodButtons}>
-              {['cash', 'card', 'digital'].map((method) => (
+              {PAYMENT_METHODS.map((m) => (
                 <TouchableOpacity
-                  key={method}
-                  style={[styles.methodButton, paymentMethod === method && styles.methodButtonActive]}
-                  onPress={() => setPaymentMethod(method)}
+                  key={m.key}
+                  style={[styles.methodButton, paymentMethod === m.key && styles.methodButtonActive]}
+                  onPress={() => setPaymentMethod(m.key)}
                 >
-                  <Text style={[styles.methodButtonText, paymentMethod === method && styles.methodButtonTextActive]}>
-                    {method === 'cash' ? 'Nakit' : method === 'card' ? 'Kart' : 'Dijital'}
+                  <Text
+                    style={[
+                      styles.methodButtonText,
+                      paymentMethod === m.key && styles.methodButtonTextActive,
+                    ]}
+                  >
+                    {m.label}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
-            <TouchableOpacity style={styles.confirmPaymentButton} onPress={handleAddPayment}>
-              <Text style={styles.confirmPaymentText}>Odemeyi Onayla</Text>
+            <TouchableOpacity
+              style={[styles.confirmPaymentButton, busy && styles.disabled]}
+              onPress={handleAddPayment}
+              disabled={busy}
+            >
+              {busy ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.confirmPaymentText}>Ödemeyi Onayla</Text>
+              )}
             </TouchableOpacity>
           </View>
         </View>
@@ -502,6 +479,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' },
   errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', gap: 16 },
   errorText: { fontFamily: 'Inter-Medium', fontSize: 16, color: '#f87171' },
+  disabled: { opacity: 0.6 },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#1e293b', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12 },
   backText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#0891b2' },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 20, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#1e293b' },

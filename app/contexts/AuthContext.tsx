@@ -1,5 +1,22 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  ReactNode,
+} from 'react';
 import { User } from '@/types/api';
+import { apolloClient } from '@/graphql/client/apollo';
+import { tokenStorage } from '@/graphql/client/storage';
+import { LOGIN, LOGOUT } from '@/graphql/mutations';
+import { ME } from '@/graphql/queries';
+import {
+  LoginResult,
+  LoginVars,
+  LogoutResult,
+  MeResult,
+} from '@/graphql/generated/operations';
 
 interface AuthContextType {
   user: User | null;
@@ -11,74 +28,83 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const TOKEN_KEY = 'cafe_pos_token';
-const USER_KEY = 'cafe_pos_user';
-
-// Demo user for testing without backend
-const DEMO_USER: User = {
-  id: '1',
-  email: 'demo@cafe.com',
-  firstName: 'Demo',
-  lastName: 'User',
-  fullName: 'Demo User',
-  phone: '+90 555 123 4567',
-  gender: null,
-  isStaff: true,
-  imageUrl: null,
-  permissions: ['waiter:view', 'orders:change', 'tables:change'],
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Uygulama açılışında: saklı token varsa `me` ile oturumu geri yükle.
   useEffect(() => {
-    const restoreSession = async () => {
+    let active = true;
+    (async () => {
       try {
-        const storedToken = localStorage.getItem(TOKEN_KEY);
-        const storedUser = localStorage.getItem(USER_KEY);
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+        const stored = await tokenStorage.get();
+        if (!stored) return;
+        const { data } = await apolloClient.query<MeResult>({
+          query: ME,
+          fetchPolicy: 'network-only',
+        });
+        if (active && data?.me) {
+          setToken(stored);
+          setUser(data.me);
+        } else {
+          await tokenStorage.clear();
         }
       } catch {
-        // Ignore errors
+        // Token geçersiz/ağ yok: sessizce temizle, login ekranına düşsün.
+        await tokenStorage.clear();
       } finally {
-        setIsLoading(false);
+        if (active) setIsLoading(false);
       }
+    })();
+    return () => {
+      active = false;
     };
-    restoreSession();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    // Demo login - accepts any credentials
+  const login = useCallback(async (email: string, password: string) => {
     try {
-      console.log(email, password);
-      
-      const demoToken = 'demo-token-' + Date.now();
-      setToken(demoToken);
-      setUser(DEMO_USER);
-      // localStorage.setItem(TOKEN_KEY, demoToken);
-      // localStorage.setItem(USER_KEY, JSON.stringify(DEMO_USER));
-      console.log('here');
-      return { success: true, message: 'Giriş başarılı.' };
-      
-    } catch (error) {
-      console.log('e',error);
-      
-      return { success: false, message: "" };
-      
+      const { data, errors } = await apolloClient.mutate<LoginResult, LoginVars>({
+        mutation: LOGIN,
+        variables: { email, password },
+      });
+
+      if (errors?.length) {
+        return { success: false, message: errors[0].message };
+      }
+
+      const payload = data?.login;
+      if (!payload || !payload.success || !payload.token || !payload.user) {
+        return {
+          success: false,
+          message: payload?.message ?? 'Giriş başarısız.',
+        };
+      }
+
+      await tokenStorage.set(payload.token);
+      setToken(payload.token);
+      setUser(payload.user);
+      return { success: true, message: payload.message };
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Bir hata oluştu. Lütfen tekrar deneyin.';
+      return { success: false, message };
     }
+  }, []);
 
-  };
-
-  const logout = async () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-  };
+  const logout = useCallback(async () => {
+    try {
+      await apolloClient.mutate<LogoutResult>({ mutation: LOGOUT });
+    } catch {
+      // Token zaten geçersizse backend hata verebilir; istemci tarafını yine de temizle.
+    } finally {
+      await tokenStorage.clear();
+      setToken(null);
+      setUser(null);
+      // WS bağlantısını da kopararak önbelleği temizle.
+      await apolloClient.clearStore().catch(() => undefined);
+    }
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>

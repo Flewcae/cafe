@@ -74,6 +74,7 @@ const styles = StyleSheet.create({
     height: 64,
     paddingBottom: 8,
     paddingTop: 8,
+    marginBottom:20
   },
   tabBarLabel: {
     fontFamily: 'Inter-Medium',

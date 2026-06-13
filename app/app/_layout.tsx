@@ -1,16 +1,22 @@
 import { useEffect } from 'react';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { ApolloProvider } from '@apollo/client';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { apolloClient } from '@/graphql/client/apollo';
+
 import {
   Inter_400Regular,
   Inter_500Medium,
   Inter_600SemiBold,
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
+
 import { useFonts } from 'expo-font';
 import { SplashScreen } from 'expo-router';
+
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -35,16 +41,23 @@ export default function RootLayout() {
   }
 
   return (
-    <AuthProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="order/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="table/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="room/[id]" options={{ headerShown: false }} />
-        <Stack.Screen name="+not-found" />
-      </Stack>
-      <StatusBar style="light" />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <ApolloProvider client={apolloClient}>
+        <AuthProvider>
+          <SafeAreaView style={{ flex: 1, backgroundColor:"#0f172a" }} edges={['top']}>
+            <Stack screenOptions={{ headerShown: false, contentStyle:{backgroundColor:"#1e293b"} }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(tabs)" />
+              <Stack.Screen name="order/[id]" />
+              <Stack.Screen name="table/[id]" />
+              <Stack.Screen name="room/[id]" />
+              <Stack.Screen name="+not-found" />
+            </Stack>
+
+            <StatusBar style="light" />
+          </SafeAreaView>
+        </AuthProvider>
+      </ApolloProvider>
+    </SafeAreaProvider>
   );
 }

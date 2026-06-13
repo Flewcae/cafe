@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+import time
 from typing import AsyncGenerator, List, Optional
 
 import strawberry
@@ -639,6 +640,13 @@ class Subscription:
                 payload = await sync_to_async(_fetch_room_payload)(room_id)
                 if payload is not None:
                     yield payload
+
+    @strawberry.subscription
+    async def test(self) -> AsyncGenerator[str, None]:
+        yield "connected"
+        while True:
+            await time.sleep(1)
+            yield "tick"
 
 
 schema = strawberry.Schema(query=Query, mutation=Mutation, subscription=Subscription)

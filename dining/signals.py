@@ -6,6 +6,27 @@ from .models import Table
 GAP = 20          # masalar arası boşluk (px)
 START = 20        # ilk masanın başlangıç konumu (px)
 
+# rooms/signals.py
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+from dining.models import Room
+from cafe.realtime import emit_event
+from dining.services import build_room_payload
+
+
+@receiver(post_save, sender=Room)
+def room_changed(sender, instance: Room, **kwargs):
+    payload = build_room_payload(instance.id)
+    print('ROOM SIGNAL CALISTI')
+
+    emit_event(
+        group_name=f"room_{instance.id}",
+        event_type="room.changed",
+        payload=payload
+    )
+
 
 @receiver(pre_save, sender=Table)
 def auto_place_new_table(sender, instance, **kwargs):
