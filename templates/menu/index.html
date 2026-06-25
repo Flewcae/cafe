@@ -1,4 +1,4 @@
-{% extends "partials/layouts/main.html" %}
+﻿{% extends "partials/layouts/main.html" %}
 {% load static %}
 {% load ext_permissions %}
 {% load currency %}
@@ -119,7 +119,7 @@
                                 {% endif %}
                                 {% if can_delete_menu %}
                                 <form method="post" action="{% url 'category-delete-category' category.id %}"
-                                      onsubmit="return confirm('“{{ category.name }}” kategorisini ve içindeki tüm ürünleri silmek istediğinize emin misiniz?');">
+                                      onsubmit="return confirm('"{{ category.name }}" kategorisini ve içindeki tüm ürünleri silmek istediğinize emin misiniz?');">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
                                 </form>
@@ -175,7 +175,7 @@
                                                 {% endif %}
                                                 {% if can_delete_menu %}
                                                 <form method="post" action="{% url 'product-delete-product' product.id %}"
-                                                      onsubmit="return confirm('“{{ product.name }}” ürününü silmek istediğinize emin misiniz?');">
+                                                      onsubmit="return confirm('"{{ product.name }}" ürününü silmek istediğinize emin misiniz?');">
                                                     {% csrf_token %}
                                                     <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
                                                 </form>
@@ -247,7 +247,7 @@
                                 {% endif %}
                                 {% if can_delete_menu %}
                                 <form method="post" action="{% url 'menu-delete-menu' menu.id %}"
-                                      onsubmit="return confirm('“{{ menu.name }}” menüsünü silmek istediğinize emin misiniz?');">
+                                      onsubmit="return confirm('"{{ menu.name }}" menüsünü silmek istediğinize emin misiniz?');">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
                                 </form>

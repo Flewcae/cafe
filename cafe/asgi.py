@@ -26,7 +26,13 @@ from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from django.urls import re_path  # noqa: E402
 from strawberry.channels import GraphQLWSConsumer  # noqa: E402
 
-from cafe.consumers import ActiveOrdersConsumer  # noqa: E402
+from cafe.consumers import (  # noqa: E402
+    ActiveOrdersConsumer,
+    FloorConsumer,
+    OrderListConsumer,
+    OrderDetailConsumer,
+    TableAdminConsumer,
+)
 from cafe.schema import schema  # noqa: E402
 
 application = ProtocolTypeRouter(
@@ -36,7 +42,11 @@ application = ProtocolTypeRouter(
             URLRouter(
                 [
                     re_path(r"^graphql/?$", GraphQLWSConsumer.as_asgi(schema=schema)),
-                    re_path(r"^ws/mutfak/?$", ActiveOrdersConsumer.as_asgi()),
+                    re_path(r"^ws/mutfak/?$",               ActiveOrdersConsumer.as_asgi()),
+                    re_path(r"^ws/garson/?$",               FloorConsumer.as_asgi()),
+                    re_path(r"^ws/siparisler/?$",           OrderListConsumer.as_asgi()),
+                    re_path(r"^ws/adisyon/(?P<pk>\d+)/?$",  OrderDetailConsumer.as_asgi()),
+                    re_path(r"^ws/masalar/?$",              TableAdminConsumer.as_asgi()),
                 ]
             )
         ),

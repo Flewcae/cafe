@@ -7,24 +7,53 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Receipt, Clock, CheckCircle, XCircle, RefreshCw } from 'lucide-react-native';
+import { Receipt, Clock, CheckCircle, XCircle, RefreshCw, Trash2 } from 'lucide-react-native';
+import { useMutation } from '@apollo/client';
 import { useActiveOrders } from '@/hooks/useActiveOrders';
 import { statusHex } from '@/theme/statusColors';
 import { useTheme, ThemeColors } from '@/contexts/ThemeContext';
+import { usePermissions } from '@/hooks/usePermissions';
+import { CANCEL_ORDER } from '@/graphql/mutations';
+import { CancelOrderResult, CancelOrderVars } from '@/graphql/generated/operations';
 
 export default function OrdersScreen() {
   const router = useRouter();
   const { orders, loading, error, refetch } = useActiveOrders();
   const { colors } = useTheme();
   const styles = getStyles(colors);
+  const { canChangeWaiter } = usePermissions();
+  const [cancelOrder] = useMutation<CancelOrderResult, CancelOrderVars>(CANCEL_ORDER);
 
   useFocusEffect(
     useCallback(() => {
       refetch();
     }, [refetch])
   );
+
+  const handleCancelOrder = (orderId: string, code: string) => {
+    Alert.alert(
+      'Adisyonu İptal Et',
+      `${code} kodlu adisyonu iptal etmek istediğinize emin misiniz?`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'İptal Et',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await cancelOrder({ variables: { orderId } });
+              await refetch();
+            } catch {
+              Alert.alert('Hata', 'Adisyon iptal edilemedi.');
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const getStatusIcon = (status: string, color: string) => {
     switch (status) {
@@ -86,9 +115,19 @@ export default function OrdersScreen() {
                     <Text style={styles.orderCode}>{item.code}</Text>
                     <Text style={styles.orderTable}>Masa {item.tableName || '-'}</Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
-                    {getStatusIcon(item.status, color)}
-                    <Text style={[styles.statusText, { color }]}>{item.statusDisplay}</Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <View style={[styles.statusBadge, { backgroundColor: color + '20' }]}>
+                      {getStatusIcon(item.status, color)}
+                      <Text style={[styles.statusText, { color }]}>{item.statusDisplay}</Text>
+                    </View>
+                    {canChangeWaiter && (
+                      <TouchableOpacity
+                        onPress={() => handleCancelOrder(item.id, item.code)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      >
+                        <Trash2 color="#f87171" size={18} />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 </View>
 

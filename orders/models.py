@@ -365,7 +365,7 @@ class Order(models.Model):
                     raise UserGenException(f"'{product.name}' şu anda servise kapalı.")
 
                 existing = order.items.filter(
-                    product=product, status=OrderItem.STATUS_PENDING
+                    product=product, status=OrderItem.STATUS_PREPARING
                 ).first()
                 if existing:
                     existing.quantity += qty
@@ -377,6 +377,7 @@ class Order(models.Model):
                         name=product.name,
                         unit_price=product.price,
                         quantity=qty,
+                        status = OrderItem.STATUS_PREPARING
                     )
         return order
 # ---------------------------------------------------------------------------

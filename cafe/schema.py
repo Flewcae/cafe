@@ -565,6 +565,12 @@ class Mutation:
             )
             if order.status == Order.STATUS_OPEN:
                 order.set_status(Order.STATUS_PREPARING)
+                # set_status → Order.save() → post_save signal → broadcast
+            else:
+                # QuerySet.update() sinyal tetiklemez; manuel broadcast gerekli
+                from cafe.realtime import broadcast_active_orders, broadcast_order
+                transaction.on_commit(lambda o=order: broadcast_order(o))
+                transaction.on_commit(broadcast_active_orders)
         return build_order(order)
 
     @strawberry.mutation

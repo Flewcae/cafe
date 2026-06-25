@@ -1,4 +1,4 @@
-{% extends "partials/layouts/main.html" %}
+﻿{% extends "partials/layouts/main.html" %}
 {% load static %}
 {% load ext_permissions %}
 {% load currency %}
@@ -64,9 +64,9 @@
     <div class="card-header"><h5 class="card-title mb-0">Açık Adisyonlar</h5></div>
     <div class="card-body">
         {% if open_orders %}
-        <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3">
+        <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-3" id="open-orders-list">
             {% for order in open_orders %}
-            <div class="col">
+            <div class="col" data-order-id="{{ order.id }}">
                 <div class="order-tile h-100 d-flex flex-column p-3 ps-4" data-status="{{ order.status }}">
                     <div class="d-flex align-items-center justify-content-between gap-2 mb-2">
                         <span class="fw-semibold text-truncate">
@@ -74,21 +74,21 @@
                             {% else %}<i class="ri-takeaway-line me-1"></i>Paket{% endif %}
                             <small class="text-muted ms-1">{{ order.code }}</small>
                         </span>
-                        <span class="badge bg-{{ order.status_color }}-subtle text-{{ order.status_color }} flex-shrink-0">{{ order.get_status_display }}</span>
+                        <span class="badge order-status-badge bg-{{ order.status_color }}-subtle text-{{ order.status_color }} flex-shrink-0">{{ order.get_status_display }}</span>
                     </div>
 
                     <div class="text-muted fs-12 mb-2">
-                        <i class="ri-shopping-basket-2-line me-1"></i>{{ order.item_count }} kalem
+                        <i class="ri-shopping-basket-2-line me-1"></i><span class="order-item-count">{{ order.item_count }}</span> kalem
                         &middot; {{ order.created_at|date:"d.m.Y H:i" }}
                     </div>
 
                     <div class="d-flex justify-content-between fs-13 mb-1">
                         <span class="text-muted">Toplam</span>
-                        <span class="fw-semibold">{{ order.total|tl_format }}</span>
+                        <span class="fw-semibold order-total">{{ order.total|tl_format }}</span>
                     </div>
                     <div class="d-flex justify-content-between fs-13 mb-3">
                         <span class="text-muted">Kalan</span>
-                        <span class="fw-semibold text-{% if order.balance > 0 %}danger{% else %}success{% endif %}">{{ order.balance|tl_format }}</span>
+                        <span class="fw-semibold order-balance text-{% if order.balance > 0 %}danger{% else %}success{% endif %}">{{ order.balance|tl_format }}</span>
                     </div>
 
                     <div class="d-flex gap-1 mt-auto">
@@ -97,7 +97,7 @@
                         </a>
                         {% if can_change_orders %}
                         <form method="post" action="{% url 'order-cancel-order' order.id %}"
-                              onsubmit="return confirm('“{{ order }}” adisyonunu iptal etmek istediğinize emin misiniz?');">
+                              onsubmit="return confirm('"{{ order }}" adisyonunu iptal etmek istediğinize emin misiniz?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-sm btn-outline-danger" title="İptal Et"><i class="ri-close-circle-line"></i></button>
                         </form>
@@ -212,5 +212,110 @@ document.addEventListener('DOMContentLoaded', function () {
         sync();
     }
 });
+
+/* --- Real-time: adisyon listesi --- */
+(function () {
+    /* --- Audio --- */
+    var _audioCtx = null;
+    function _ac() {
+        if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(function(){});
+        return _audioCtx;
+    }
+    document.addEventListener('click', function() { _ac(); }, { once: true });
+    function playBeep(f, d, v) {
+        try {
+            var c = _ac();
+            var o = c.createOscillator(), g = c.createGain();
+            o.connect(g); g.connect(c.destination);
+            o.frequency.value = f || 660; o.type = 'sine';
+            g.gain.setValueAtTime(v || 0.25, c.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + (d || 150) / 1000);
+            o.start(); o.stop(c.currentTime + (d || 150) / 1000);
+        } catch (e) {}
+    }
+    function playSoftBeep() { playBeep(660, 150, 0.25); }
+
+    /* --- Badge renk güncelleyici --- */
+    var BS = ['success','danger','warning','info','primary','secondary'];
+    function setBadge(el, display, color) {
+        if (!el) return;
+        el.textContent = display;
+        BS.forEach(function (c) { el.classList.remove('bg-'+c+'-subtle','text-'+c); });
+        if (color) { el.classList.add('bg-'+color+'-subtle','text-'+color); }
+    }
+
+    /* --- TL format --- */
+    function tlFmt(value) {
+        var n = parseFloat(String(value).replace(',', '.'));
+        if (isNaN(n)) return value + ' ₺';
+        return n.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ₺';
+    }
+
+    /* Sayfa yüklenirken mevcut order id'leri topla. */
+    var knownOrderIds = new Set();
+    document.querySelectorAll('.col[data-order-id]').forEach(function (el) {
+        knownOrderIds.add(el.dataset.orderId);
+    });
+
+    var reloading = false;
+
+    function applyOrderListUpdate(data) {
+        if (!data.orders) return;
+
+        var hasNew = false;
+
+        data.orders.forEach(function (order) {
+            if (!knownOrderIds.has(order.id)) {
+                hasNew = true;
+                knownOrderIds.add(order.id);
+            }
+
+            var col = document.querySelector('.col[data-order-id="' + order.id + '"]');
+            if (!col) return;
+
+            /* data-status güncelle (left border CSS için) */
+            var tile = col.querySelector('.order-tile');
+            if (tile) tile.dataset.status = order.status;
+
+            setBadge(col.querySelector('.order-status-badge'),
+                order.status_display, order.status_color);
+
+            var ic = col.querySelector('.order-item-count');
+            if (ic) ic.textContent = order.item_count;
+
+            var tot = col.querySelector('.order-total');
+            if (tot) tot.textContent = tlFmt(order.total);
+
+            var bal = col.querySelector('.order-balance');
+            if (bal) {
+                bal.textContent = tlFmt(order.balance);
+                bal.classList.remove('text-danger','text-success');
+                bal.classList.add(parseFloat(order.balance) > 0 ? 'text-danger' : 'text-success');
+            }
+        });
+
+        /* Yeni adisyon geldiyse: bip + kısa bekleme sonrası reload */
+        if (hasNew && !reloading) {
+            reloading = true;
+            playSoftBeep();
+            setTimeout(function () { window.location.reload(); }, 1200);
+        }
+    }
+
+    function connect() {
+        var proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        var ws = new WebSocket(proto + window.location.host + '/ws/siparisler/');
+        ws.onmessage = function (evt) {
+            try {
+                var d = JSON.parse(evt.data);
+                if (d.event === 'active_orders.changed') applyOrderListUpdate(d);
+            } catch (e) {}
+        };
+        ws.onclose = function () { setTimeout(connect, 3000); };
+    }
+
+    connect();
+})();
 </script>
 {% endblock js %}

@@ -1,4 +1,4 @@
-{% extends "partials/layouts/main.html" %}
+﻿{% extends "partials/layouts/main.html" %}
 {% load static %}
 {% load ext_permissions %}
 
@@ -102,7 +102,7 @@
             {% endif %}
             {% if can_delete_tables %}
             <form method="post" action="{% url 'room-delete-room' room.id %}"
-                  onsubmit="return confirm('“{{ room.name }}” salonunu ve içindeki tüm masaları silmek istediğinize emin misiniz?');">
+                  onsubmit="return confirm('"{{ room.name }}" salonunu ve içindeki tüm masaları silmek istediğinize emin misiniz?');">
                 {% csrf_token %}
                 <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
             </form>
@@ -115,13 +115,13 @@
         <div class="row row-cols-2 row-cols-md-3 row-cols-xxl-4 g-3 tables-grid">
             {% for table in room.tables.all %}
             <div class="col">
-                <div class="table-tile h-100 d-flex flex-column" data-status="{{ table.status }}">
+                <div class="table-tile h-100 d-flex flex-column" data-table-id="{{ table.id }}" data-status="{{ table.status }}">
                     <div class="d-flex align-items-center justify-content-between gap-2">
                         <span class="tile-name d-inline-flex align-items-center gap-2 text-truncate">
                             <span class="status-dot bg-{{ table.status_color }}"></span>
                             <span class="fw-semibold text-truncate">{{ table.name }}</span>
                         </span>
-                        <span class="badge bg-{{ table.status_color }}-subtle text-{{ table.status_color }} flex-shrink-0">{{ table.get_status_display }}</span>
+                        <span class="badge tile-status-badge bg-{{ table.status_color }}-subtle text-{{ table.status_color }} flex-shrink-0">{{ table.get_status_display }}</span>
                     </div>
 
                     <div class="text-muted fs-12 mt-1 text-truncate">
@@ -154,7 +154,7 @@
                         {% endif %}
                         {% if can_delete_tables %}
                         <form method="post" action="{% url 'table-delete-table' table.id %}"
-                              onsubmit="return confirm('“{{ table.name }}” masasını silmek istediğinize emin misiniz?');">
+                              onsubmit="return confirm('"{{ table.name }}" masasını silmek istediğinize emin misiniz?');">
                             {% csrf_token %}
                             <button type="submit" class="btn btn-sm btn-outline-danger"><i class="ri-delete-bin-5-line"></i></button>
                         </form>
@@ -376,6 +376,47 @@
 
 {% block js %}
 <script>
+/* --- Real-time: masa durumu güncellemesi --- */
+(function () {
+    var BS = ['success','danger','warning','info','primary','secondary'];
+
+    function setBadge(el, display, color) {
+        if (!el) return;
+        el.textContent = display;
+        BS.forEach(function (c) { el.classList.remove('bg-'+c+'-subtle','text-'+c); });
+        if (color) { el.classList.add('bg-'+color+'-subtle','text-'+color); }
+    }
+
+    function applyTableUpdate(data) {
+        if (!data.tables) return;
+        data.tables.forEach(function (t) {
+            var tile = document.querySelector('.table-tile[data-table-id="' + t.id + '"]');
+            if (!tile) return;
+            tile.dataset.status = t.status;
+            var dot = tile.querySelector('.status-dot');
+            if (dot) {
+                BS.forEach(function (c) { dot.classList.remove('bg-'+c); });
+                dot.classList.add('bg-' + t.status_color);
+            }
+            setBadge(tile.querySelector('.tile-status-badge'), t.status_display, t.status_color);
+        });
+    }
+
+    function connect() {
+        var proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        var ws = new WebSocket(proto + window.location.host + '/ws/masalar/');
+        ws.onmessage = function (evt) {
+            try {
+                var d = JSON.parse(evt.data);
+                if (d.event === 'active_orders.changed') applyTableUpdate(d);
+            } catch (e) {}
+        };
+        ws.onclose = function () { setTimeout(connect, 3000); };
+    }
+
+    connect();
+})();
+
 document.addEventListener('DOMContentLoaded', function () {
     document.querySelectorAll('.add-table-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {

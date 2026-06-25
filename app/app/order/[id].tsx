@@ -26,10 +26,11 @@ import {
   X,
   Banknote,
   Wallet,
+  Trash2,
 } from 'lucide-react-native';
 import { ORDER } from '@/graphql/queries';
 import { ORDER_UPDATES } from '@/graphql/subscriptions';
-import { MARK_SERVED, ADD_PAYMENT } from '@/graphql/mutations';
+import { MARK_SERVED, ADD_PAYMENT, CANCEL_ORDER } from '@/graphql/mutations';
 import {
   OrderResult,
   OrderVars,
@@ -39,6 +40,8 @@ import {
   MarkServedVars,
   AddPaymentResult,
   AddPaymentVars,
+  CancelOrderResult,
+  CancelOrderVars,
 } from '@/graphql/generated/operations';
 import { statusHex } from '@/theme/statusColors';
 import { errorMessage } from '@/graphql/client/errors';
@@ -73,6 +76,7 @@ export default function OrderDetailScreen() {
 
   const [markServed] = useMutation<MarkServedResult, MarkServedVars>(MARK_SERVED);
   const [addPayment] = useMutation<AddPaymentResult, AddPaymentVars>(ADD_PAYMENT);
+  const [cancelOrder] = useMutation<CancelOrderResult, CancelOrderVars>(CANCEL_ORDER);
 
   const [order, setOrder] = useState<OrderResult['order']>(null);
 
@@ -113,6 +117,31 @@ export default function OrderDetailScreen() {
     setPaymentMethod(PAYMENT_METHODS[0].value);
     setPaymentNote('');
     setPaymentVisible(true);
+  };
+
+  const handleCancelOrder = () => {
+    if (!order) return;
+    Alert.alert(
+      'Adisyonu İptal Et',
+      `${order.code} kodlu adisyonu iptal etmek istediğinize emin misiniz?`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'İptal Et',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              await cancelOrder({ variables: { orderId: order.id } });
+              router.back();
+            } catch {
+              Alert.alert('Hata', 'Adisyon iptal edilemedi.');
+              setBusy(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleAddPayment = async () => {
@@ -303,7 +332,7 @@ export default function OrderDetailScreen() {
         )}
       </ScrollView>
 
-      {order.isOpen && (showServeButton || showPaymentButton) && (
+      {order.isOpen && (showServeButton || showPaymentButton || canChangeWaiter) && (
         <View style={styles.actionBar}>
           {showServeButton && (
             <TouchableOpacity
@@ -335,6 +364,15 @@ export default function OrderDetailScreen() {
               <Text style={styles.actionButtonText}>
                 {canPay ? 'Ödeme Al' : 'Önce Servis Edilmeli'}
               </Text>
+            </TouchableOpacity>
+          )}
+          {canChangeWaiter && (
+            <TouchableOpacity
+              style={[styles.cancelButton, busy && styles.actionButtonDisabled]}
+              onPress={handleCancelOrder}
+              disabled={busy}
+            >
+              <Trash2 color="#f87171" size={20} />
             </TouchableOpacity>
           )}
         </View>
@@ -498,6 +536,7 @@ const getStyles = (colors: ThemeColors) =>
   actionButtonDisabled: { opacity: 0.6 },
   actionButtonText: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: colors.accentText },
   paymentActionButton: { backgroundColor: colors.accent },
+  cancelButton: { width: 52, height: 52, alignItems: 'center', justifyContent: 'center', borderRadius: 12, borderWidth: 1, borderColor: '#f87171', backgroundColor: '#f871710f' },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modalSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36, gap: 4 },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

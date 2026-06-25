@@ -33,6 +33,7 @@ import {
   DELETE_ORDER_ITEM,
   SEND_TO_KITCHEN,
   ADD_PAYMENT,
+  CANCEL_ORDER,
 } from '@/graphql/mutations';
 import {
   TableDetailResult,
@@ -51,6 +52,8 @@ import {
   SendToKitchenVars,
   AddPaymentResult,
   AddPaymentVars,
+  CancelOrderResult,
+  CancelOrderVars,
 } from '@/graphql/generated/operations';
 import { errorMessage } from '@/graphql/client/errors';
 import { statusHex } from '@/theme/statusColors';
@@ -121,6 +124,7 @@ export default function TableScreen() {
   const [deleteOrderItem] = useMutation<DeleteOrderItemResult, DeleteOrderItemVars>(DELETE_ORDER_ITEM);
   const [sendToKitchen] = useMutation<SendToKitchenResult, SendToKitchenVars>(SEND_TO_KITCHEN);
   const [addPayment] = useMutation<AddPaymentResult, AddPaymentVars>(ADD_PAYMENT);
+  const [cancelOrder] = useMutation<CancelOrderResult, CancelOrderVars>(CANCEL_ORDER);
 
   useEffect(()=>{
     if (openOrder) {
@@ -172,6 +176,25 @@ export default function TableScreen() {
     run(() => sendToKitchen({ variables: { orderId: openOrder.id } }), 'Mutfağa gönderilemedi.');
   };
 
+  const handleCloseTable = () => {
+    if (!openOrder) return;
+    Alert.alert(
+      'Masayı Kapat',
+      'Bu masanın adisyonunu iptal edip masayı kapatmak istediğinize emin misiniz?',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Masayı Kapat',
+          style: 'destructive',
+          onPress: () => run(
+            () => cancelOrder({ variables: { orderId: openOrder.id } }),
+            'Masa kapatılamadı.'
+          ),
+        },
+      ]
+    );
+  };
+
   const handleAddPayment = async () => {
     if (!openOrder) return;
     const amount = parseFloat(paymentAmount.replace(',', '.'));
@@ -217,10 +240,9 @@ export default function TableScreen() {
   }
 
   const hasPendingItems = openOrder?.items.some((i) => i.status === 'pending');
-  // Ödeme butonu yalnızca TÜM kalemler teslim edildiğinde (order.status === 'served')
-  // aktif olmalı — sync_status_from_items, aktif kalemlerin hepsi 'served' olmadan
-  // adisyonu 'served' yapmaz (bkz. orders/models.py).
   const canPay = !!openOrder && openOrder.status === 'served' && !openOrder.isFullyPaid;
+  /* Masayı kapat: adisyon açık, içinde hiç sipariş yok, toplam = 0 */
+  const canCloseTable = !!openOrder && openOrder.items.length === 0 && canChangeWaiter;
 
   return (
     <View style={styles.container}>
@@ -369,7 +391,7 @@ export default function TableScreen() {
         )}
       </ScrollView>
 
-      {openOrder && ((canChangeWaiter && hasPendingItems) || canChangeOrders) && (
+      {openOrder && ((canChangeWaiter && hasPendingItems) || canChangeOrders || canCloseTable) && (
         <View style={styles.actionBar}>
           {canChangeWaiter && hasPendingItems && (
             <TouchableOpacity
@@ -391,6 +413,16 @@ export default function TableScreen() {
               <Text style={styles.actionButtonText}>
                 {canPay ? 'Ödeme Al' : 'Önce Servis Edilmeli'}
               </Text>
+            </TouchableOpacity>
+          )}
+          {canCloseTable && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.closeTableButton, busy && styles.disabled]}
+              onPress={handleCloseTable}
+              disabled={busy}
+            >
+              <X color="#f87171" size={20} />
+              <Text style={[styles.actionButtonText, { color: '#f87171' }]}>Masayı Kapat</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -575,6 +607,7 @@ const getStyles = (colors: ThemeColors) =>
   actionBar: { flexDirection: 'row', gap: 12, padding: 16, borderTopWidth: 1, borderTopColor: colors.surface, position: 'absolute', bottom: 0, left: 0, right: 0 },
   actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 16 },
   paymentButton: { backgroundColor: '#22c55e' },
+  closeTableButton: { backgroundColor: '#f871710f', borderWidth: 1, borderColor: '#f87171' },
   actionButtonText: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: colors.accentText },
   modalContainer: { flex: 1, backgroundColor: colors.background },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20, borderBottomWidth: 1, borderBottomColor: colors.surface },

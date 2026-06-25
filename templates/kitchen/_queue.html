@@ -7,7 +7,8 @@
             <div class="card-header"><h5 class="card-title mb-0"><i class="ri-fire-line me-1"></i> Hazırlanıyor</h5></div>
             <div class="card-body">
                 {% for item in preparing_items %}
-                <div class="d-flex align-items-center justify-content-between gap-3 py-2 border-bottom">
+                <div class="d-flex align-items-center justify-content-between gap-3 py-2 border-bottom"
+                     data-item-id="{{ item.id }}">
                     <div>
                         <div class="fw-semibold">{{ item.quantity }}× {{ item.name }}</div>
                         <small class="text-muted">

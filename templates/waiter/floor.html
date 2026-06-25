@@ -60,18 +60,20 @@
         {% if room.tables.all %}
         <div class="row row-cols-2 row-cols-md-3 row-cols-xxl-4 g-3">
             {% for table in room.tables.all %}
-            <div class="col">
+            <div class="col"
+                 data-table-id="{{ table.id }}"
+                 data-has-order="{% if table.open_order %}true{% else %}false{% endif %}">
                 {% if table.open_order %}
                 <a href="{% url 'waiter_ticket' table.open_order.id %}"
                    class="w-tile open text-decoration-none text-body h-100"
                    data-status="occupied">
                     <div class="d-flex align-items-center justify-content-between">
                         <span class="fw-bold text-truncate"><i class="ri-restaurant-2-line me-1"></i>{{ table.name }}</span>
-                        <span class="badge bg-{{ table.open_order.status_color }}-subtle text-{{ table.open_order.status_color }}">{{ table.open_order.get_status_display }}</span>
+                        <span class="badge tile-order-badge bg-{{ table.open_order.status_color }}-subtle text-{{ table.open_order.status_color }}">{{ table.open_order.get_status_display }}</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between mt-2">
-                        <small class="text-muted">{{ table.open_order.item_count }} kalem</small>
-                        <strong>{{ table.open_order.total|tl_format }}</strong>
+                        <small class="text-muted tile-item-count">{{ table.open_order.item_count }} kalem</small>
+                        <strong class="tile-total">{{ table.open_order.total|tl_format }}</strong>
                     </div>
                 </a>
                 {% else %}
@@ -82,7 +84,7 @@
                             {% if not can_open or table.status == 'disabled' %}disabled{% endif %}>
                         <div class="d-flex align-items-center justify-content-between">
                             <span class="fw-bold text-truncate"><i class="ri-restaurant-2-line me-1"></i>{{ table.name }}</span>
-                            <span class="badge bg-{{ table.status_color }}-subtle text-{{ table.status_color }}">{{ table.get_status_display }}</span>
+                            <span class="badge tile-status-badge bg-{{ table.status_color }}-subtle text-{{ table.status_color }}">{{ table.get_status_display }}</span>
                         </div>
                         <div class="d-flex align-items-center justify-content-between mt-2">
                             <small class="text-muted"><i class="ri-group-line me-1"></i>{{ table.capacity }} kişilik</small>
@@ -130,4 +132,113 @@
 </div>
 {% endif %}
 {% endblock content %}
-{% block js %}{% endblock js %}
+{% block js %}
+<script>
+(function () {
+    /* --- Audio --- */
+    var _audioCtx = null;
+    function _ac() {
+        if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(function(){});
+        return _audioCtx;
+    }
+    document.addEventListener('click', function() { _ac(); }, { once: true });
+    function playBeep(f, d, v) {
+        try {
+            var c = _ac();
+            var o = c.createOscillator(), g = c.createGain();
+            o.connect(g); g.connect(c.destination);
+            o.frequency.value = f || 660; o.type = 'sine';
+            g.gain.setValueAtTime(v || 0.25, c.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + (d || 150) / 1000);
+            o.start(); o.stop(c.currentTime + (d || 150) / 1000);
+        } catch (e) {}
+    }
+    function playSoftBeep() { playBeep(660, 150, 0.25); }
+
+    /* --- Badge renk güncelleyici --- */
+    var BS = ['success','danger','warning','info','primary','secondary'];
+    function setBadge(el, display, color) {
+        if (!el) return;
+        el.textContent = display;
+        BS.forEach(function (c) { el.classList.remove('bg-'+c+'-subtle','text-'+c); });
+        if (color) { el.classList.add('bg-'+color+'-subtle','text-'+color); }
+    }
+
+    /* --- TL format --- */
+    function tlFmt(value) {
+        var n = parseFloat(String(value).replace(',', '.'));
+        if (isNaN(n)) return value + ' ₺';
+        return n.toLocaleString('tr-TR', {minimumFractionDigits:2, maximumFractionDigits:2}) + ' ₺';
+    }
+
+    var knownReadyIds = new Set();
+    var floorInitialized = false; /* ilk WS snapshot'ta mevcut ready itemları sessizce kaydet */
+    var reloading = false;
+
+    /* --- WS güncellemesi uygula --- */
+    function applyFloorUpdate(data) {
+        if (!data.tables || reloading) return;
+
+        var needsReload = false;
+
+        data.tables.forEach(function (t) {
+            var col = document.querySelector('.col[data-table-id="' + t.id + '"]');
+            if (!col) return;
+
+            var currentHasOrder = col.dataset.hasOrder === 'true';
+            if (currentHasOrder !== t.has_open_order) {
+                needsReload = true;
+                return;
+            }
+
+            /* CSS border rengi için data-status güncelle */
+            var tile = col.querySelector('.w-tile');
+            if (tile) tile.dataset.status = t.has_open_order ? 'occupied' : t.status;
+
+            if (t.has_open_order) {
+                setBadge(col.querySelector('.tile-order-badge'),
+                    t.order_status_display, t.order_status_color);
+                var ic = col.querySelector('.tile-item-count');
+                if (ic) ic.textContent = t.item_count + ' kalem';
+                var tot = col.querySelector('.tile-total');
+                if (tot) tot.textContent = tlFmt(t.total);
+
+                (t.order_items || []).forEach(function (item) {
+                    if (!floorInitialized) {
+                        knownReadyIds.add(item.id); /* sayfa açıkken zaten ready olanlar sessiz */
+                    } else if (item.status === 'ready' && !knownReadyIds.has(item.id)) {
+                        knownReadyIds.add(item.id);
+                        playSoftBeep();
+                    }
+                });
+            } else {
+                setBadge(col.querySelector('.tile-status-badge'),
+                    t.status_display, t.status_color);
+            }
+        });
+
+        floorInitialized = true;
+
+        if (needsReload && !reloading) {
+            reloading = true;
+            setTimeout(function () { window.location.reload(); }, 600);
+        }
+    }
+
+    function connect() {
+        var proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        var ws = new WebSocket(proto + window.location.host + '/ws/garson/');
+        ws.onmessage = function (evt) {
+            try {
+                var d = JSON.parse(evt.data);
+                if (d.event === 'active_orders.changed') applyFloorUpdate(d);
+            } catch (e) {}
+        };
+        ws.onclose = function () { setTimeout(connect, 3000); };
+    }
+
+    connect();
+})();
+</script>
+{% endblock js %}

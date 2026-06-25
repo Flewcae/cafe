@@ -23,11 +23,78 @@
     var container = document.getElementById('kitchen-queue');
     var queueUrl = "{% url 'kitchen_queue_partial' %}";
 
-    function refresh() {
+    /* --- Audio --- */
+    var _audioCtx = null;
+    function _ac() {
+        if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_audioCtx.state === 'suspended') _audioCtx.resume().catch(function(){});
+        return _audioCtx;
+    }
+    document.addEventListener('click', function() { _ac(); }, { once: true });
+    function playBeep(f, d, v) {
+        try {
+            var c = _ac();
+            var o = c.createOscillator(), g = c.createGain();
+            o.connect(g); g.connect(c.destination);
+            o.frequency.value = f || 880; o.type = 'sine';
+            g.gain.setValueAtTime(v || 0.4, c.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + (d || 250) / 1000);
+            o.start(); o.stop(c.currentTime + (d || 250) / 1000);
+        } catch (e) {}
+    }
+    function playDoubleBeep() {
+        playBeep(880, 200, 0.5);
+        setTimeout(function () { playBeep(1100, 200, 0.5); }, 260);
+    }
+
+    var knownIds = new Set();
+    var initialized = false;
+
+    /*
+     * Race-condition koruması:
+     *   - debounceTimer: Ardışık WS eventlerini (örn. item ekleme + mutfağa gönder)
+     *     tek bir fetch'e indirger. 120 ms içinde gelen tüm eventler birleşir.
+     *   - fetchSeq: Her fetch'e artan bir sıra numarası verilir. Yanıt geldiğinde
+     *     sıra numarası hâlâ güncel değilse (yani aradan daha yeni bir fetch
+     *     başlamışsa) yanıt görmezden gelinir — eski veri yeniyi ezmez.
+     */
+    var debounceTimer = null;
+    var fetchSeq = 0;
+
+    function collectIds() {
+        var ids = new Set();
+        container.querySelectorAll('[data-item-id]').forEach(function (el) {
+            ids.add(el.dataset.itemId);
+        });
+        return ids;
+    }
+
+    function initIds() {
+        collectIds().forEach(function (id) { knownIds.add(id); });
+        initialized = true;
+    }
+
+    function doRefresh() {
+        var mySeq = ++fetchSeq;
         fetch(queueUrl, { credentials: 'same-origin' })
             .then(function (res) { return res.text(); })
-            .then(function (html) { container.innerHTML = html; })
+            .then(function (html) {
+                if (mySeq !== fetchSeq) return; /* daha yeni bir istek var, bu yanıtı at */
+                container.innerHTML = html;
+                if (!initialized) { initIds(); return; }
+                var after = collectIds();
+                var hasNew = false;
+                after.forEach(function (id) {
+                    if (!knownIds.has(id)) { knownIds.add(id); hasNew = true; }
+                });
+                if (hasNew) playDoubleBeep();
+            })
             .catch(function () {});
+    }
+
+    function refresh() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(doRefresh, 120);
     }
 
     function connect() {
@@ -37,13 +104,12 @@
             try {
                 var data = JSON.parse(evt.data);
                 if (data.event === 'active_orders.changed') refresh();
-            } catch (e) { /* ignore malformed frames */ }
+            } catch (e) {}
         };
-        ws.onclose = function () {
-            setTimeout(connect, 3000);
-        };
+        ws.onclose = function () { setTimeout(connect, 3000); };
     }
 
+    initIds();
     connect();
 })();
 </script>

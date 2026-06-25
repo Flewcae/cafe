@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 
 from authorizement.constants import Action, Perm
 from cafe.action_resolver import action_resolver, UserGenException
+from cafe.realtime import broadcast_active_orders, broadcast_order
 from common.decorators import anahtar_auth
 from dining.models import Room
 from menu.models import Category
@@ -155,6 +156,11 @@ def send_to_kitchen(request, pk=None):
         )
         if order.status == Order.STATUS_OPEN:
             order.set_status(Order.STATUS_PREPARING)
+            # set_status → Order.save() → post_save signal → broadcast (signals.py)
+        else:
+            # QuerySet.update() signal tetiklemez; sonraki gönderimler için manuel broadcast
+            transaction.on_commit(lambda o=order: broadcast_order(o))
+            transaction.on_commit(broadcast_active_orders)
 
 
 @action_resolver(
