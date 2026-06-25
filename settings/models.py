@@ -12,6 +12,7 @@ class Organization(models.Model):
     logo_min_dark = models.ImageField(upload_to='organization_logos/', blank=True, null=True)
     favicon = models.ImageField(upload_to='organization_logos/', blank=True, null=True)
     theme_color = ColorField(default='#FF0000')
+    updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name

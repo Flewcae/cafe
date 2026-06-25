@@ -71,6 +71,15 @@ export const ORDER = gql`
   ${ORDER_FIELDS}
 `;
 
+export const ACTIVE_ORDERS = gql`
+  query ActiveOrders {
+    activeOrders {
+      ...OrderFields
+    }
+  }
+  ${ORDER_FIELDS}
+`;
+
 export const MENU = gql`
   query Menu {
     menu {
@@ -78,4 +87,20 @@ export const MENU = gql`
     }
   }
   ${CATEGORY_FIELDS}
+`;
+
+/** Marka rengi/logo: oturum açmadan da (login ekranı) çekilebilir. */
+export const ORGANIZATION_SETTINGS = gql`
+  query OrganizationSettings {
+    organizationSettings {
+      name
+      themeColor
+      logoLightUrl
+      logoDarkUrl
+      logoMinLightUrl
+      logoMinDarkUrl
+      faviconUrl
+      updatedAt
+    }
+  }
 `;

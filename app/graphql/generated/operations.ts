@@ -11,11 +11,16 @@ import {
   Category,
   AuthPayload,
   Result,
+  OrganizationSettings,
 } from '@/types/api';
 
 // --- Queries ---------------------------------------------------------------
 export interface MeResult {
   me: User | null;
+}
+
+export interface OrganizationSettingsResult {
+  organizationSettings: OrganizationSettings | null;
 }
 
 export interface RoomsResult {
@@ -52,6 +57,10 @@ export interface OrderResult {
 }
 export interface OrderVars {
   id: string;
+}
+
+export interface ActiveOrdersResult {
+  activeOrders: Order[];
 }
 
 export interface MenuResult {
@@ -165,4 +174,19 @@ export interface RoomUpdatesResult {
 }
 export interface RoomUpdatesVars {
   roomId: string;
+}
+
+export interface TableUpdatesResult {
+  tableUpdates: {
+    table: Table;
+    openOrder: Order | null;
+    menu: Category[];
+  } | null;
+}
+export interface TableUpdatesVars {
+  tableId: string;
+}
+
+export interface ActiveOrdersUpdatesResult {
+  activeOrdersUpdates: Order[];
 }

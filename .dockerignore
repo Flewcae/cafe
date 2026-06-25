@@ -1,0 +1,14 @@
+venv/
+app/
+node_modules/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+db.sqlite3
+staticfiles/
+media/
+.env
+.env.example
+*.md
+.expo/

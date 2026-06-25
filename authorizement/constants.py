@@ -4,6 +4,7 @@ class Perm:
     MENU = "menu"
     ORDERS = "orders"
     WAITER = "waiter"
+    KITCHEN = "kitchen"
     USERS = "users"
     SYSTEM_SETTINGS = "system_settings"
     AUTHORIZEMENT = "authorizement"

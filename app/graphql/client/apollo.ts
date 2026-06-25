@@ -80,9 +80,22 @@ const splitLink = split(
   from([authLink, httpLink])
 );
 
+// İç içe (rooms.tables.openOrder, activeOrders[].items vb.) nesnelerin
+// normalize cache'te `id` üzerinden doğru eşleşmesi için — bu olmadan bir
+// subscription'ın güncellediği Order/Table, başka bir query'nin embedded
+// kopyasında yansımayabilir.
+const cache = new InMemoryCache({
+  typePolicies: {
+    OrderType: { keyFields: ['id'] },
+    OrderItemType: { keyFields: ['id'] },
+    TableType: { keyFields: ['id'] },
+    RoomType: { keyFields: ['id'] },
+  },
+});
+
 export const apolloClient = new ApolloClient({
   link: from([errorLink, splitLink]),
-  cache: new InMemoryCache(),
+  cache,
   defaultOptions: {
     watchQuery: { fetchPolicy: 'cache-and-network', errorPolicy: 'all' },
     query: { fetchPolicy: 'network-only', errorPolicy: 'all' },

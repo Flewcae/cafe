@@ -1,77 +1,47 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useQuery } from '@apollo/client';
-import { apolloClient } from '@/graphql/client/apollo';
-import { ROOMS, ORDER } from '@/graphql/queries';
+import { useQuery, useSubscription } from '@apollo/client';
+import { ACTIVE_ORDERS } from '@/graphql/queries';
+import { ACTIVE_ORDERS_UPDATES } from '@/graphql/subscriptions';
 import {
-  RoomsResult,
-  OrderResult,
-  OrderVars,
+  ActiveOrdersResult,
+  ActiveOrdersUpdatesResult,
 } from '@/graphql/generated/operations';
 import { Order } from '@/types/api';
 
 /**
- * Backend'de adisyonları listeleyen bir query YOKTUR. Aktif (masaya bağlı)
- * adisyonları `rooms` sorgusundan (her masanın `openOrderId` alanı) toplayıp
- * her biri için `order(id)` çağırarak yeniden kurarız.
+ * Backend `activeOrders` query + `activeOrdersUpdates` subscription: masaya
+ * bağlı VE paket/gel-al tüm açık adisyonları tek seferde döner ve her
+ * değişiklikte (hangi yoldan gelirse gelsin — mutation, garson web paneli,
+ * mutfak paneli) canlı günceller.
  *
- * Sınırlama: paket/gel-al (takeaway) adisyonların masası olmadığından bu
- * yöntemle gelmez — schema bunları listeleyen bir alan sunmuyor.
+ * `subData`, yalnızca WS üzerinden yeni bir push geldiğinde değişir — bir
+ * mutation'ın (örn. markServed) cache'e yazdığı tazelik onu otomatik
+ * güncellemez. Sabit `subData ?? data` önceliği bu yüzden mutation sonrası
+ * bir süre (sıradaki WS push'una kadar) eski veriyi göstermeye devam
+ * ediyordu (örn. "servis edildi" butonu hâlâ aktif görünüyordu). Bunun
+ * yerine hangi kaynak EN SON değiştiyse onu kullanıyoruz; böylece bir
+ * mutation'ın cache güncellemesi (query'nin reaktif `data`'sı üzerinden)
+ * sıradaki WS push'unu beklemeden anında yansır.
  */
 export function useActiveOrders() {
-  const { data, loading, error, refetch } = useQuery<RoomsResult>(ROOMS, {
+  const { data, loading, error, refetch } = useQuery<ActiveOrdersResult>(ACTIVE_ORDERS, {
     fetchPolicy: 'cache-and-network',
     errorPolicy: 'all',
   });
 
+  const { data: subData } = useSubscription<ActiveOrdersUpdatesResult>(
+    ACTIVE_ORDERS_UPDATES
+  );
+
   const [orders, setOrders] = useState<Order[]>([]);
-  const [ordersLoading, setOrdersLoading] = useState(false);
-  const [ordersError, setOrdersError] = useState<string | null>(null);
 
   useEffect(() => {
-    const ids = (data?.rooms ?? [])
-      .flatMap((r) => r.tables)
-      .filter((t) => t.hasOpenOrder && t.openOrderId)
-      .map((t) => t.openOrderId as string);
-
-    if (ids.length === 0) {
-      setOrders([]);
-      return;
-    }
-
-    let active = true;
-    setOrdersLoading(true);
-    setOrdersError(null);
-
-    Promise.all(
-      ids.map((id) =>
-        apolloClient
-          .query<OrderResult, OrderVars>({
-            query: ORDER,
-            variables: { id },
-            fetchPolicy: 'network-only',
-            errorPolicy: 'all',
-          })
-          .then((res) => res.data?.order ?? null)
-          .catch(() => null)
-      )
-    )
-      .then((list) => {
-        if (!active) return;
-        const valid = list.filter((o): o is Order => o != null);
-        // Açık olmayan (ödenmiş/iptal) gelirse ele
-        setOrders(valid.filter((o) => o.isOpen));
-      })
-      .catch(() => {
-        if (active) setOrdersError('Adisyonlar yüklenemedi.');
-      })
-      .finally(() => {
-        if (active) setOrdersLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    if (data?.activeOrders) setOrders(data.activeOrders);
   }, [data]);
+
+  useEffect(() => {
+    if (subData?.activeOrdersUpdates) setOrders(subData.activeOrdersUpdates);
+  }, [subData]);
 
   const refetchAll = useCallback(async () => {
     await refetch();
@@ -79,8 +49,8 @@ export function useActiveOrders() {
 
   return {
     orders,
-    loading: loading || ordersLoading,
-    error: error ? error.message : ordersError,
+    loading,
+    error: error ? error.message : null,
     refetch: refetchAll,
   };
 }

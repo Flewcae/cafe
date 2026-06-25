@@ -1,31 +1,26 @@
-from django.db.models.signals import pre_save
+from django.db import transaction
+from django.db.models.signals import pre_save, post_save, post_delete
 from django.dispatch import receiver
 
-from .models import Table
+from .models import Room, Table
+from cafe.realtime import broadcast_room, broadcast_table
 
 GAP = 20          # masalar arası boşluk (px)
 START = 20        # ilk masanın başlangıç konumu (px)
 
-# rooms/signals.py
-
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-
-from dining.models import Room
-from cafe.realtime import emit_event
-from dining.services import build_room_payload
-
 
 @receiver(post_save, sender=Room)
+@receiver(post_delete, sender=Room)
 def room_changed(sender, instance: Room, **kwargs):
-    payload = build_room_payload(instance.id)
-    print('ROOM SIGNAL CALISTI')
+    transaction.on_commit(lambda: broadcast_room(instance.id))
 
-    emit_event(
-        group_name=f"room_{instance.id}",
-        event_type="room.changed",
-        payload=payload
-    )
+
+@receiver(post_save, sender=Table)
+@receiver(post_delete, sender=Table)
+def table_changed(sender, instance: Table, **kwargs):
+    transaction.on_commit(lambda: broadcast_table(instance.id))
+    if instance.room_id:
+        transaction.on_commit(lambda: broadcast_room(instance.room_id))
 
 
 @receiver(pre_save, sender=Table)

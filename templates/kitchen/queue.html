@@ -1,0 +1,50 @@
+{% extends "partials/layouts/main.html" %}
+{% load static %}
+
+{% include "partials/main.html" %}
+
+{% block meta %}
+{% with title="Mutfak Paneli" %}{% include "partials/title-meta.html" %}{% endwith %}
+{% endblock %}
+
+{% block content %}
+{% with title_sub="Anasayfa" title="Mutfak Paneli" %}
+{% include "partials/pagetitle.html" %}
+{% endwith %}
+
+<div id="kitchen-queue">
+    {% include "kitchen/_queue.html" %}
+</div>
+{% endblock content %}
+
+{% block js %}
+<script>
+(function () {
+    var container = document.getElementById('kitchen-queue');
+    var queueUrl = "{% url 'kitchen_queue_partial' %}";
+
+    function refresh() {
+        fetch(queueUrl, { credentials: 'same-origin' })
+            .then(function (res) { return res.text(); })
+            .then(function (html) { container.innerHTML = html; })
+            .catch(function () {});
+    }
+
+    function connect() {
+        var proto = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        var ws = new WebSocket(proto + window.location.host + '/ws/mutfak/');
+        ws.onmessage = function (evt) {
+            try {
+                var data = JSON.parse(evt.data);
+                if (data.event === 'active_orders.changed') refresh();
+            } catch (e) { /* ignore malformed frames */ }
+        };
+        ws.onclose = function () {
+            setTimeout(connect, 3000);
+        };
+    }
+
+    connect();
+})();
+</script>
+{% endblock js %}

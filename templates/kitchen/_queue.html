@@ -1,0 +1,59 @@
+{% load ext_permissions %}
+{% has_ext_perm user "kitchen" "change" as can_change %}
+
+<div class="row g-3">
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0"><i class="ri-fire-line me-1"></i> Hazırlanıyor</h5></div>
+            <div class="card-body">
+                {% for item in preparing_items %}
+                <div class="d-flex align-items-center justify-content-between gap-3 py-2 border-bottom">
+                    <div>
+                        <div class="fw-semibold">{{ item.quantity }}× {{ item.name }}</div>
+                        <small class="text-muted">
+                            {% if item.order.table %}<i class="ri-restaurant-2-line me-1"></i>{{ item.order.table.name }}{% else %}<i class="ri-takeaway-line me-1"></i>Paket{% endif %}
+                            <span class="ms-1">{{ item.order.code }}</span>
+                        </small>
+                        {% if item.note %}<div class="small text-muted">Not: {{ item.note }}</div>{% endif %}
+                    </div>
+                    {% if can_change %}
+                    <form method="post" action="{% url 'kitchen_mark_ready' item.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-primary flex-shrink-0"><i class="ri-check-line me-1"></i>Hazır</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="alert alert-light text-center border mb-0">Hazırlanan kalem yok.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-header"><h5 class="card-title mb-0"><i class="ri-check-double-line me-1"></i> Hazır — Servis Bekliyor</h5></div>
+            <div class="card-body">
+                {% for item in ready_items %}
+                <div class="d-flex align-items-center justify-content-between gap-3 py-2 border-bottom">
+                    <div>
+                        <div class="fw-semibold">{{ item.quantity }}× {{ item.name }}</div>
+                        <small class="text-muted">
+                            {% if item.order.table %}<i class="ri-restaurant-2-line me-1"></i>{{ item.order.table.name }}{% else %}<i class="ri-takeaway-line me-1"></i>Paket{% endif %}
+                            <span class="ms-1">{{ item.order.code }}</span>
+                        </small>
+                    </div>
+                    {% if can_change %}
+                    <form method="post" action="{% url 'kitchen_unmark_ready' item.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-outline-secondary flex-shrink-0">Geri Al</button>
+                    </form>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="alert alert-light text-center border mb-0">Hazır kalem yok.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>

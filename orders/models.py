@@ -34,6 +34,7 @@ def _to_decimal(value, default=Decimal('0')):
 class Order(models.Model):
     STATUS_OPEN = 'open'
     STATUS_PREPARING = 'preparing'
+    STATUS_READY = 'ready'
     STATUS_SERVED = 'served'
     STATUS_PAID = 'paid'
     STATUS_CANCELLED = 'cancelled'
@@ -41,6 +42,7 @@ class Order(models.Model):
     STATUS_CHOICES = [
         (STATUS_OPEN, 'Açık'),
         (STATUS_PREPARING, 'Hazırlanıyor'),
+        (STATUS_READY, 'Hazır'),
         (STATUS_SERVED, 'Servis Edildi'),
         (STATUS_PAID, 'Ödendi'),
         (STATUS_CANCELLED, 'İptal'),
@@ -99,6 +101,7 @@ class Order(models.Model):
         return {
             self.STATUS_OPEN: 'info',
             self.STATUS_PREPARING: 'warning',
+            self.STATUS_READY: 'danger',
             self.STATUS_SERVED: 'primary',
             self.STATUS_PAID: 'success',
             self.STATUS_CANCELLED: 'secondary',
@@ -252,6 +255,34 @@ class Order(models.Model):
     def cancel(self):
         return self.set_status(self.STATUS_CANCELLED)
 
+    def sync_status_from_items(self):
+        """Kalemlerin durumuna göre adisyon durumunu otomatik türetir.
+
+        Mutfak bir kalemi 'ready' yaparsa ya da hepsi 'served' olursa, adisyon
+        bunu manuel bir `set_status` çağrısına ihtiyaç duymadan yansıtır.
+        Yalnızca mutfağa gönderilmiş adisyonlarda (preparing/ready) çalışır —
+        'open' durumuna kasıtlı olarak dokunmaz: bir adisyona ürün eklemek
+        (henüz pending) onu otomatik 'preparing'e taşımamalı, bu hâlâ garsonun
+        "mutfağa gönder" aksiyonuna ait. Servis edilmiş/ödenmiş/iptal
+        adisyonlara da dokunmaz.
+        """
+        if self.status not in {self.STATUS_PREPARING, self.STATUS_READY}:
+            return
+
+        statuses = {i.status for i in self.active_items}
+        if not statuses:
+            return
+
+        if statuses & {OrderItem.STATUS_PENDING, OrderItem.STATUS_PREPARING}:
+            target = self.STATUS_PREPARING
+        elif statuses <= {OrderItem.STATUS_SERVED}:
+            target = self.STATUS_SERVED
+        else:
+            target = self.STATUS_READY
+
+        if target != self.status:
+            self.set_status(target)
+
     def add_payment_from_form(self, form_data, user=None):
         if not self.is_open:
             raise UserGenException("Kapanmış bir adisyona ödeme eklenemez.")
@@ -354,12 +385,14 @@ class Order(models.Model):
 class OrderItem(models.Model):
     STATUS_PENDING = 'pending'
     STATUS_PREPARING = 'preparing'
+    STATUS_READY = 'ready'
     STATUS_SERVED = 'served'
     STATUS_CANCELLED = 'cancelled'
 
     STATUS_CHOICES = [
         (STATUS_PENDING, 'Beklemede'),
         (STATUS_PREPARING, 'Hazırlanıyor'),
+        (STATUS_READY, 'Hazır'),
         (STATUS_SERVED, 'Servis Edildi'),
         (STATUS_CANCELLED, 'İptal'),
     ]
@@ -397,6 +430,7 @@ class OrderItem(models.Model):
         return {
             self.STATUS_PENDING: 'secondary',
             self.STATUS_PREPARING: 'warning',
+            self.STATUS_READY: 'info',
             self.STATUS_SERVED: 'success',
             self.STATUS_CANCELLED: 'danger',
         }.get(self.status, 'secondary')

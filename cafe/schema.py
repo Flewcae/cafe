@@ -4,8 +4,7 @@ import time
 from typing import AsyncGenerator, List, Optional
 
 import strawberry
-from asgiref.sync import async_to_sync, sync_to_async
-from channels.layers import get_channel_layer
+from asgiref.sync import sync_to_async
 from django.contrib.auth import authenticate
 from django.db import transaction
 from knox.models import AuthToken
@@ -17,6 +16,7 @@ from common.utils import get_auth_token_from_request, get_user_from_request
 from dining.models import Room, Table
 from menu.models import Category, Product
 from orders.models import Order, OrderItem, Receipt
+from settings.models import AppSettings
 
 
 # ---------------------------------------------------------------------------
@@ -61,30 +61,6 @@ def _require(info, perm: Optional[str] = None, action: Optional[str] = None):
 
 
 # ---------------------------------------------------------------------------
-# Channel-layer broadcasting
-# ---------------------------------------------------------------------------
-def _publish(group: str, message_type: str, **data) -> None:
-    layer = get_channel_layer()
-    if layer is None:  # CHANNEL_LAYERS not configured -> realtime disabled, no-op
-        return
-    payload = {"type": message_type}
-    payload.update(data)
-    async_to_sync(layer.group_send)(group, payload)
-
-
-def broadcast_order(order: Order) -> None:
-    """Notify the order's ticket subscribers, and the room map (occupancy/total)."""
-    _publish(f"order_{order.id}", "order.changed", order_id=str(order.id))
-    if order.table_id:
-        room_id = order.table.room_id
-        _publish(f"room_{room_id}", "room.changed", room_id=str(room_id))
-
-
-def broadcast_room(room_id) -> None:
-    _publish(f"room_{room_id}", "room.changed", room_id=str(room_id))
-
-
-# ---------------------------------------------------------------------------
 # Types
 # ---------------------------------------------------------------------------
 @strawberry.type
@@ -113,6 +89,18 @@ class AuthPayload:
 class Result:
     success: bool
     message: str
+
+
+@strawberry.type
+class OrganizationSettingsType:
+    name: str
+    theme_color: str
+    logo_light_url: Optional[str]
+    logo_dark_url: Optional[str]
+    logo_min_light_url: Optional[str]
+    logo_min_dark_url: Optional[str]
+    favicon_url: Optional[str]
+    updated_at: datetime
 
 
 @strawberry.type
@@ -235,6 +223,23 @@ def _safe_image_url(field) -> Optional[str]:
         return field.url if field else None
     except Exception:
         return None
+
+
+def build_organization_settings() -> Optional[OrganizationSettingsType]:
+    config = AppSettings.get_config()
+    if not config or not config.organization:
+        return None
+    org = config.organization
+    return OrganizationSettingsType(
+        name=org.name,
+        theme_color=org.theme_color,
+        logo_light_url=_safe_image_url(org.logo_light),
+        logo_dark_url=_safe_image_url(org.logo_dark),
+        logo_min_light_url=_safe_image_url(org.logo_min_light),
+        logo_min_dark_url=_safe_image_url(org.logo_min_dark),
+        favicon_url=_safe_image_url(org.favicon),
+        updated_at=org.updated_at,
+    )
 
 
 def build_user(user: User) -> UserType:
@@ -361,6 +366,27 @@ def _fetch_room_payload(room_id) -> Optional[RoomType]:
     return build_room(room, _open_orders_by_table())
 
 
+def _fetch_table_detail(table_id) -> Optional[TableDetailType]:
+    table = Table.objects.filter(pk=table_id).select_related("room").first()
+    if not table:
+        return None
+    order = _open_order_for_table(table)
+    return TableDetailType(
+        table=build_table(table, order),
+        open_order=build_order(order) if order else None,
+        menu=_active_menu(),
+    )
+
+
+def _fetch_active_orders() -> List[OrderType]:
+    qs = (
+        Order.objects.exclude(status__in=Order.CLOSED_STATUSES)
+        .select_related("table").prefetch_related("items__product", "receipts")
+        .order_by("created_at")
+    )
+    return [build_order(o) for o in qs]
+
+
 # ---------------------------------------------------------------------------
 # Query
 # ---------------------------------------------------------------------------
@@ -370,6 +396,11 @@ class Query:
     def me(self, info: strawberry.Info) -> Optional[UserType]:
         user = _current_user(info)
         return build_user(user) if user else None
+
+    @strawberry.field
+    def organization_settings(self, info: strawberry.Info) -> Optional[OrganizationSettingsType]:
+        """Marka rengi/logo: oturum açmadan da (login ekranı) erişilebilir olmalı."""
+        return build_organization_settings()
 
     @strawberry.field
     def rooms(self, info: strawberry.Info) -> List[RoomType]:
@@ -398,20 +429,18 @@ class Query:
         self, info: strawberry.Info, table_id: strawberry.ID
     ) -> Optional[TableDetailType]:
         _require(info, Perm.WAITER, Action.VIEW)
-        table = Table.objects.filter(pk=table_id).select_related("room").first()
-        if not table:
-            return None
-        order = _open_order_for_table(table)
-        return TableDetailType(
-            table=build_table(table, order),
-            open_order=build_order(order) if order else None,
-            menu=_active_menu(),
-        )
+        return _fetch_table_detail(table_id)
 
     @strawberry.field
     def order(self, info: strawberry.Info, id: strawberry.ID) -> Optional[OrderType]:
         _require(info, Perm.WAITER, Action.VIEW)
         return _fetch_order_payload(id)
+
+    @strawberry.field
+    def active_orders(self, info: strawberry.Info) -> List[OrderType]:
+        """Masaya bağlı ve paket/gel-al dahil tüm açık adisyonlar."""
+        _require(info, Perm.WAITER, Action.VIEW)
+        return _fetch_active_orders()
 
     @strawberry.field
     def menu(self, info: strawberry.Info) -> List[CategoryType]:
@@ -420,7 +449,7 @@ class Query:
 
 
 # ---------------------------------------------------------------------------
-# Mutation  (every state change ends with a broadcast)
+# Mutation  (realtime broadcast happens automatically via orders/dining signals)
 # ---------------------------------------------------------------------------
 @strawberry.type
 class Mutation:
@@ -465,7 +494,6 @@ class Mutation:
         if not table:
             raise UserGenException("Masa bulunamadı.")
         order = Order.get_or_create_open_for_table(table, user=user)
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -478,7 +506,6 @@ class Mutation:
         if not order:
             raise UserGenException("Adisyon bulunamadı.")
         order.add_item_from_form({"product": product_id, "quantity": quantity, "note": note})
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -499,7 +526,6 @@ class Mutation:
         if note is not None:
             form["note"] = note
         item.update_from_form(form)
-        broadcast_order(item.order)
         return build_order(item.order)
 
     @strawberry.mutation
@@ -512,7 +538,6 @@ class Mutation:
         if not order.is_open:
             raise UserGenException("Kapanmış bir adisyonun kalemi silinemez.")
         item.delete()
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -524,7 +549,6 @@ class Mutation:
         if not order:
             raise UserGenException("Adisyon bulunamadı.")
         order.set_status(status)
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -541,7 +565,6 @@ class Mutation:
             )
             if order.status == Order.STATUS_OPEN:
                 order.set_status(Order.STATUS_PREPARING)
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -552,12 +575,17 @@ class Mutation:
             raise UserGenException("Adisyon bulunamadı.")
         if not order.is_open:
             raise UserGenException("Kapanmış bir adisyon güncellenemez.")
+        if order.items.filter(
+            status__in=[OrderItem.STATUS_PENDING, OrderItem.STATUS_PREPARING]
+        ).exists():
+            raise UserGenException(
+                "Sipariş hâlâ hazırlanıyor. Mutfak hazır olarak işaretlemeden servis edilemez."
+            )
         with transaction.atomic():
             order.items.exclude(status=OrderItem.STATUS_CANCELLED).update(
                 status=OrderItem.STATUS_SERVED
             )
             order.set_status(Order.STATUS_SERVED)
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -572,7 +600,6 @@ class Mutation:
         order.add_payment_from_form(
             {"amount": str(amount), "method": method, "note": note}, user=user
         )
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -582,7 +609,6 @@ class Mutation:
         if not order:
             raise UserGenException("Adisyon bulunamadı.")
         order.cancel()
-        broadcast_order(order)
         return build_order(order)
 
     @strawberry.mutation
@@ -594,7 +620,6 @@ class Mutation:
         if not table:
             raise UserGenException("Masa bulunamadı.")
         table.set_status(status)
-        broadcast_room(table.room_id)
         return build_table(table, _open_order_for_table(table))
 
 
@@ -623,6 +648,32 @@ class Subscription:
                     yield payload
 
     @strawberry.subscription
+    async def table_updates(
+        self, info: strawberry.Info, table_id: strawberry.ID
+    ) -> AsyncGenerator[TableDetailType, None]:
+        """Masa ekranı: abone olunca ve masa/adisyon her değiştiğinde (yeni
+        adisyon açılışı dahil) tam masa detayını yayınlar.
+
+        `order_updates`'ten farkı: belirli bir order id'sine bağlı değil,
+        masaya bağlı — bu yüzden masada henüz açık adisyon yokken de abone
+        olunabilir ve müşteri QR'dan ilk siparişi verdiği an (ya da başka
+        bir garson/mutfak/admin masada bir şey değiştirdiğinde) yakalanır.
+        """
+        if await sync_to_async(_ws_user)(info) is None:
+            raise UserGenException("Oturum doğrulanamadı.")
+        ws = info.context["ws"]
+
+        payload = await sync_to_async(_fetch_table_detail)(table_id)
+        if payload is not None:
+            yield payload
+
+        async with ws.listen_to_channel("table.changed", groups=[f"table_{table_id}"]) as cm:
+            async for _message in cm:
+                payload = await sync_to_async(_fetch_table_detail)(table_id)
+                if payload is not None:
+                    yield payload
+
+    @strawberry.subscription
     async def room_updates(
         self, info: strawberry.Info, room_id: strawberry.ID
     ) -> AsyncGenerator[RoomType, None]:
@@ -640,6 +691,21 @@ class Subscription:
                 payload = await sync_to_async(_fetch_room_payload)(room_id)
                 if payload is not None:
                     yield payload
+
+    @strawberry.subscription
+    async def active_orders_updates(
+        self, info: strawberry.Info
+    ) -> AsyncGenerator[List[OrderType], None]:
+        """Mutfak/Adisyonlar ekranları: abone olunca ve her değişiklikte tüm açık adisyonları yayınlar."""
+        if await sync_to_async(_ws_user)(info) is None:
+            raise UserGenException("Oturum doğrulanamadı.")
+        ws = info.context["ws"]
+
+        yield await sync_to_async(_fetch_active_orders)()
+
+        async with ws.listen_to_channel("active_orders.changed", groups=["active_orders"]) as cm:
+            async for _message in cm:
+                yield await sync_to_async(_fetch_active_orders)()
 
     @strawberry.subscription
     async def test(self) -> AsyncGenerator[str, None]:

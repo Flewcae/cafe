@@ -1,15 +1,18 @@
 import { Tabs, Redirect } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { useTheme, ThemeColors } from '@/contexts/ThemeContext';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Home, Receipt, ChefHat, User } from 'lucide-react-native';
 
 export default function TabLayout() {
   const { user, token, isLoading } = useAuth();
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
 
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0891b2" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -23,8 +26,8 @@ export default function TabLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
-        tabBarActiveTintColor: '#0891b2',
-        tabBarInactiveTintColor: '#64748b',
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarLabelStyle: styles.tabBarLabel,
       }}
     >
@@ -60,24 +63,25 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#0f172a',
-  },
-  tabBar: {
-    backgroundColor: '#1e293b',
-    borderTopColor: '#334155',
-    borderTopWidth: 1,
-    height: 64,
-    paddingBottom: 8,
-    paddingTop: 8,
-    marginBottom:20
-  },
-  tabBarLabel: {
-    fontFamily: 'Inter-Medium',
-    fontSize: 12,
-  },
-});
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    tabBar: {
+      backgroundColor: colors.surface,
+      borderTopColor: colors.border,
+      borderTopWidth: 1,
+      height: 64,
+      paddingBottom: 8,
+      paddingTop: 8,
+      marginBottom: 20,
+    },
+    tabBarLabel: {
+      fontFamily: 'Inter-Medium',
+      fontSize: 12,
+    },
+  });

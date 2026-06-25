@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,28 @@ import {
   ActivityIndicator,
   Alert,
   RefreshControl,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery, useSubscription, useMutation } from '@apollo/client';
-import { ArrowLeft, RefreshCw, Clock, ChefHat, CheckCircle, Users } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  RefreshCw,
+  Clock,
+  ChefHat,
+  CheckCircle,
+  Users,
+  CreditCard,
+  X,
+  Banknote,
+  Wallet,
+} from 'lucide-react-native';
 import { ORDER } from '@/graphql/queries';
 import { ORDER_UPDATES } from '@/graphql/subscriptions';
-import { MARK_SERVED } from '@/graphql/mutations';
+import { MARK_SERVED, ADD_PAYMENT } from '@/graphql/mutations';
 import {
   OrderResult,
   OrderVars,
@@ -22,14 +37,27 @@ import {
   OrderUpdatesVars,
   MarkServedResult,
   MarkServedVars,
+  AddPaymentResult,
+  AddPaymentVars,
 } from '@/graphql/generated/operations';
 import { statusHex } from '@/theme/statusColors';
 import { errorMessage } from '@/graphql/client/errors';
+import { usePermissions } from '@/hooks/usePermissions';
+import { useTheme, ThemeColors } from '@/contexts/ThemeContext';
+
+const PAYMENT_METHODS: { value: string; label: string; icon: typeof Banknote }[] = [
+  { value: 'cash', label: 'Nakit', icon: Banknote },
+  { value: 'card', label: 'Kredi Kartı', icon: CreditCard },
+  { value: 'other', label: 'Diğer', icon: Wallet },
+];
 
 export default function OrderDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  const { canChangeWaiter, canChangeOrders } = usePermissions();
+  const { colors } = useTheme();
+  const styles = getStyles(colors);
 
   const { data, loading, error, refetch } = useQuery<OrderResult, OrderVars>(ORDER, {
     variables: { id: id ?? '' },
@@ -44,8 +72,25 @@ export default function OrderDetailScreen() {
   });
 
   const [markServed] = useMutation<MarkServedResult, MarkServedVars>(MARK_SERVED);
+  const [addPayment] = useMutation<AddPaymentResult, AddPaymentVars>(ADD_PAYMENT);
 
-  const order = subData?.orderUpdates ?? data?.order ?? null;
+  const [order, setOrder] = useState<OrderResult['order']>(null);
+
+  const [paymentVisible, setPaymentVisible] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState(PAYMENT_METHODS[0].value);
+  const [paymentNote, setPaymentNote] = useState('');
+  const [paymentBusy, setPaymentBusy] = useState(false);
+
+  // Hangi kaynak (query/mutation cache güncellemesi vs. WS push) en son
+  // değiştiyse o kullanılır — bkz. useActiveOrders.ts'teki aynı düzeltme.
+  useEffect(() => {
+    if (data?.order) setOrder(data.order);
+  }, [data]);
+
+  useEffect(() => {
+    if (subData?.orderUpdates) setOrder(subData.orderUpdates);
+  }, [subData]);
 
   const handleMarkServed = async () => {
     if (!order) return;
@@ -59,6 +104,45 @@ export default function OrderDetailScreen() {
       Alert.alert('Hata', errorMessage(err, 'İşlem tamamlanamadı.'));
     } finally {
       setBusy(false);
+    }
+  };
+
+  const openPaymentModal = () => {
+    if (!order) return;
+    setPaymentAmount(order.balance);
+    setPaymentMethod(PAYMENT_METHODS[0].value);
+    setPaymentNote('');
+    setPaymentVisible(true);
+  };
+
+  const handleAddPayment = async () => {
+    if (!order) return;
+    const numericAmount = Number(paymentAmount.replace(',', '.'));
+    if (!numericAmount || numericAmount <= 0) {
+      Alert.alert('Hata', 'Geçerli bir tutar girin.');
+      return;
+    }
+    if (numericAmount > Number(order.balance)) {
+      Alert.alert('Hata', 'Tutar, kalan bakiyeyi aşamaz.');
+      return;
+    }
+    setPaymentBusy(true);
+    try {
+      await addPayment({
+        variables: {
+          orderId: order.id,
+          amount: paymentAmount.replace(',', '.'),
+          method: paymentMethod,
+          note: paymentNote || null,
+        },
+      });
+      await refetch();
+      setPaymentVisible(false);
+      Alert.alert('Başarılı', 'Ödeme alındı.');
+    } catch (err) {
+      Alert.alert('Hata', errorMessage(err, 'Ödeme alınamadı.'));
+    } finally {
+      setPaymentBusy(false);
     }
   };
 
@@ -85,7 +169,7 @@ export default function OrderDetailScreen() {
   if (loading && !order) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#0891b2" />
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
@@ -95,7 +179,7 @@ export default function OrderDetailScreen() {
       <View style={styles.errorContainer}>
         <Text style={styles.errorText}>{error ? 'Adisyon yüklenemedi' : 'Adisyon bulunamadı'}</Text>
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <ArrowLeft color="#0891b2" size={20} />
+          <ArrowLeft color={colors.accent} size={20} />
           <Text style={styles.backText}>Geri</Text>
         </TouchableOpacity>
       </View>
@@ -103,20 +187,30 @@ export default function OrderDetailScreen() {
   }
 
   const orderColor = statusHex(order.statusColor);
-  const hasPendingItems = order.items.some((i) => i.status === 'pending');
+  // Servis butonu yalnızca mutfak her kalemi 'ready' yaptıktan sonra (order.status === 'ready')
+  // aktif olmalı — hazırlanıyorken garson servis edildi diyemez. Yetkisi (waiter:change)
+  // yoksa buton hiç gösterilmez — backend'in zaten reddedeceği bir aksiyon önerilmez.
+  const canServe = order.status === 'ready';
+  const showServeButton = canChangeWaiter && canServe;
+  // Ödeme butonu yalnızca TÜM kalemler teslim edildiğinde (order.status === 'served')
+  // aktif olmalı — sync_status_from_items, aktif kalemlerin hepsi 'served' olmadan
+  // adisyonu 'served' yapmaz (bkz. orders/models.py). orders:change yetkisi yoksa
+  // buton hiç gösterilmez.
+  const canPay = order.status === 'served' && !order.isFullyPaid;
+  const showPaymentButton = canChangeOrders && order.isOpen && !order.isFullyPaid;
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <ArrowLeft color="#0891b2" size={24} />
+          <ArrowLeft color={colors.accent} size={24} />
         </TouchableOpacity>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Adisyon {order.code}</Text>
           <Text style={styles.headerSubtitle}>Masa {order.tableName || '-'}</Text>
         </View>
         <TouchableOpacity onPress={() => refetch()}>
-          <RefreshCw color="#0891b2" size={24} />
+          <RefreshCw color={colors.accent} size={24} />
         </TouchableOpacity>
       </View>
 
@@ -124,7 +218,7 @@ export default function OrderDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={
-          <RefreshControl refreshing={loading} onRefresh={() => refetch()} tintColor="#0891b2" />
+          <RefreshControl refreshing={loading} onRefresh={() => refetch()} tintColor={colors.accent} />
         }
       >
         <View style={styles.statusCard}>
@@ -137,7 +231,7 @@ export default function OrderDetailScreen() {
           </View>
           <View style={styles.statusInfo}>
             <View style={styles.statusInfoItem}>
-              <Users color="#94a3b8" size={14} />
+              <Users color={colors.textSecondary} size={14} />
               <Text style={styles.statusInfoText}>Masa {order.tableName || '-'}</Text>
             </View>
             <Text style={styles.statusInfoText}>{order.itemCount} Kalem</Text>
@@ -209,43 +303,144 @@ export default function OrderDetailScreen() {
         )}
       </ScrollView>
 
-      {order.isOpen && hasPendingItems && (
+      {order.isOpen && (showServeButton || showPaymentButton) && (
         <View style={styles.actionBar}>
-          <TouchableOpacity
-            style={[styles.actionButton, busy && styles.actionButtonDisabled]}
-            onPress={handleMarkServed}
-            disabled={busy}
-          >
-            {busy ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <>
-                <CheckCircle color="#ffffff" size={20} />
-                <Text style={styles.actionButtonText}>Servis Edildi</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {showServeButton && (
+            <TouchableOpacity
+              style={[styles.actionButton, busy && styles.actionButtonDisabled]}
+              onPress={handleMarkServed}
+              disabled={busy}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.accentText} />
+              ) : (
+                <>
+                  <CheckCircle color={colors.accentText} size={20} />
+                  <Text style={styles.actionButtonText}>Servis Edildi</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+          {showPaymentButton && (
+            <TouchableOpacity
+              style={[
+                styles.actionButton,
+                styles.paymentActionButton,
+                !canPay && styles.actionButtonDisabled,
+              ]}
+              onPress={openPaymentModal}
+              disabled={!canPay}
+            >
+              <CreditCard color={colors.accentText} size={20} />
+              <Text style={styles.actionButtonText}>
+                {canPay ? 'Ödeme Al' : 'Önce Servis Edilmeli'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
+
+      <Modal
+        visible={paymentVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPaymentVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ödeme Al</Text>
+              <TouchableOpacity onPress={() => setPaymentVisible(false)}>
+                <X color={colors.textSecondary} size={22} />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalBalanceText}>Kalan Bakiye: {order.balance} TL</Text>
+
+            <Text style={styles.modalLabel}>Tutar</Text>
+            <View style={styles.amountRow}>
+              <TextInput
+                style={styles.amountInput}
+                value={paymentAmount}
+                onChangeText={setPaymentAmount}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={colors.textMuted}
+              />
+              <TouchableOpacity
+                style={styles.fullAmountButton}
+                onPress={() => setPaymentAmount(order.balance)}
+              >
+                <Text style={styles.fullAmountButtonText}>Tümü</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalLabel}>Ödeme Yöntemi</Text>
+            <View style={styles.methodRow}>
+              {PAYMENT_METHODS.map((m) => {
+                const Icon = m.icon;
+                const active = paymentMethod === m.value;
+                return (
+                  <TouchableOpacity
+                    key={m.value}
+                    style={[styles.methodChip, active && styles.methodChipActive]}
+                    onPress={() => setPaymentMethod(m.value)}
+                  >
+                    <Icon color={active ? colors.accentText : colors.textSecondary} size={16} />
+                    <Text style={[styles.methodChipText, active && styles.methodChipTextActive]}>
+                      {m.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.modalLabel}>Not (opsiyonel)</Text>
+            <TextInput
+              style={styles.noteInput}
+              value={paymentNote}
+              onChangeText={setPaymentNote}
+              placeholder="Not ekleyin..."
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <TouchableOpacity
+              style={[styles.confirmButton, paymentBusy && styles.actionButtonDisabled]}
+              onPress={handleAddPayment}
+              disabled={paymentBusy}
+            >
+              {paymentBusy ? (
+                <ActivityIndicator color={colors.accentText} />
+              ) : (
+                <Text style={styles.confirmButtonText}>Ödemeyi Onayla</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
-  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a' },
-  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0f172a', gap: 16 },
+const getStyles = (colors: ThemeColors) =>
+  StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: 16 },
   errorText: { fontFamily: 'Inter-Medium', fontSize: 16, color: '#f87171' },
   backButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: '#1e293b',
+    backgroundColor: colors.surface,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
   },
-  backText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#0891b2' },
+  backText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.accent },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -253,53 +448,115 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#1e293b',
+    borderBottomColor: colors.surface,
   },
   backBtn: { padding: 4, marginRight: 12 },
   headerContent: { flex: 1 },
-  headerTitle: { fontFamily: 'Inter-Bold', fontSize: 24, color: '#ffffff' },
-  headerSubtitle: { fontFamily: 'Inter-Regular', fontSize: 14, color: '#94a3b8' },
+  headerTitle: { fontFamily: 'Inter-Bold', fontSize: 24, color: colors.textPrimary },
+  headerSubtitle: { fontFamily: 'Inter-Regular', fontSize: 14, color: colors.textSecondary },
   scroll: { flex: 1 },
   scrollContent: { padding: 16, paddingBottom: 120 },
-  statusCard: { backgroundColor: '#1e293b', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#334155' },
+  statusCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   statusHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusLabel: { fontFamily: 'Inter-SemiBold', fontSize: 18, color: '#e2e8f0' },
-  statusDate: { fontFamily: 'Inter-Regular', fontSize: 12, color: '#64748b' },
+  statusLabel: { fontFamily: 'Inter-SemiBold', fontSize: 18, color: colors.textPrimary },
+  statusDate: { fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textMuted },
   statusInfo: { flexDirection: 'row', justifyContent: 'space-between' },
   statusInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statusInfoText: { fontFamily: 'Inter-Regular', fontSize: 14, color: '#94a3b8' },
+  statusInfoText: { fontFamily: 'Inter-Regular', fontSize: 14, color: colors.textSecondary },
   section: { marginBottom: 16 },
-  sectionTitle: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#94a3b8', marginBottom: 12 },
-  itemCard: { backgroundColor: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 8, borderLeftWidth: 4, borderWidth: 1, borderColor: '#334155' },
+  sectionTitle: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.textSecondary, marginBottom: 12 },
+  itemCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 16, marginBottom: 8, borderLeftWidth: 4, borderWidth: 1, borderColor: colors.border },
   itemMain: { flexDirection: 'row', alignItems: 'center' },
-  itemQuantity: { fontFamily: 'Inter-Bold', fontSize: 16, color: '#0891b2', width: 40 },
+  itemQuantity: { fontFamily: 'Inter-Bold', fontSize: 16, color: colors.accent, width: 40 },
   itemInfo: { flex: 1 },
-  itemName: { fontFamily: 'Inter-Medium', fontSize: 16, color: '#e2e8f0' },
-  itemPrice: { fontFamily: 'Inter-Regular', fontSize: 12, color: '#64748b' },
-  itemTotal: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: '#94a3b8' },
-  itemNote: { marginTop: 8, fontFamily: 'Inter-Regular', fontSize: 12, color: '#94a3b8', fontStyle: 'italic' },
+  itemName: { fontFamily: 'Inter-Medium', fontSize: 16, color: colors.textPrimary },
+  itemPrice: { fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textMuted },
+  itemTotal: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: colors.textSecondary },
+  itemNote: { marginTop: 8, fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary, fontStyle: 'italic' },
   itemStatus: { marginTop: 12 },
   statusBadge: { alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   statusBadgeText: { fontFamily: 'Inter-SemiBold', fontSize: 11 },
-  totalsCard: { backgroundColor: '#1e293b', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#334155' },
+  totalsCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: colors.border },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
-  totalLabel: { fontFamily: 'Inter-Regular', fontSize: 14, color: '#94a3b8' },
-  totalValue: { fontFamily: 'Inter-Medium', fontSize: 14, color: '#e2e8f0' },
-  totalValueBold: { fontFamily: 'Inter-Bold', fontSize: 18, color: '#ffffff' },
-  balanceRow: { borderTopWidth: 1, borderTopColor: '#334155', marginTop: 8, paddingTop: 16 },
-  balanceLabel: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: '#e2e8f0' },
+  totalLabel: { fontFamily: 'Inter-Regular', fontSize: 14, color: colors.textSecondary },
+  totalValue: { fontFamily: 'Inter-Medium', fontSize: 14, color: colors.textPrimary },
+  totalValueBold: { fontFamily: 'Inter-Bold', fontSize: 18, color: colors.textPrimary },
+  balanceRow: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 8, paddingTop: 16 },
+  balanceLabel: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.textPrimary },
   balanceValue: { fontFamily: 'Inter-Bold', fontSize: 20 },
   paid: { color: '#22c55e' },
   unpaid: { color: '#f87171' },
-  receiptCard: { backgroundColor: '#1e293b', borderRadius: 12, padding: 16, marginBottom: 8, borderWidth: 1, borderColor: '#334155' },
+  receiptCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 16, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
   receiptInfo: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  receiptCode: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: '#e2e8f0' },
-  receiptMethod: { fontFamily: 'Inter-Regular', fontSize: 12, color: '#94a3b8' },
+  receiptCode: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: colors.textPrimary },
+  receiptMethod: { fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textSecondary },
   receiptAmount: { fontFamily: 'Inter-Bold', fontSize: 20, color: '#22c55e', marginTop: 8 },
-  receiptDate: { fontFamily: 'Inter-Regular', fontSize: 12, color: '#64748b', marginTop: 4 },
-  actionBar: { flexDirection: 'row', gap: 12, padding: 16, borderTopWidth: 1, borderTopColor: '#1e293b', position: 'absolute', bottom: 0, left: 0, right: 0 },
+  receiptDate: { fontFamily: 'Inter-Regular', fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  actionBar: { flexDirection: 'row', gap: 12, padding: 16, borderTopWidth: 1, borderTopColor: colors.surface, position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: colors.background },
   actionButton: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#22c55e', borderRadius: 12, paddingVertical: 16 },
   actionButtonDisabled: { opacity: 0.6 },
-  actionButtonText: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: '#ffffff' },
+  actionButtonText: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: colors.accentText },
+  paymentActionButton: { backgroundColor: colors.accent },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+  modalSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: 36, gap: 4 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  modalTitle: { fontFamily: 'Inter-Bold', fontSize: 20, color: colors.textPrimary },
+  modalBalanceText: { fontFamily: 'Inter-Medium', fontSize: 14, color: '#f59e0b', marginBottom: 16 },
+  modalLabel: { fontFamily: 'Inter-SemiBold', fontSize: 13, color: colors.textSecondary, marginTop: 12, marginBottom: 8 },
+  amountRow: { flexDirection: 'row', gap: 10 },
+  amountInput: {
+    flex: 1,
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    fontFamily: 'Inter-SemiBold',
+    fontSize: 18,
+    color: colors.textPrimary,
+  },
+  fullAmountButton: {
+    justifyContent: 'center',
+    paddingHorizontal: 18,
+    borderRadius: 12,
+    backgroundColor: colors.border,
+  },
+  fullAmountButtonText: { fontFamily: 'Inter-SemiBold', fontSize: 14, color: colors.textPrimary },
+  methodRow: { flexDirection: 'row', gap: 8 },
+  methodChip: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.background,
+  },
+  methodChipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
+  methodChipText: { fontFamily: 'Inter-Medium', fontSize: 12, color: colors.textSecondary },
+  methodChipTextActive: { color: colors.accentText },
+  noteInput: {
+    backgroundColor: colors.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontFamily: 'Inter-Regular',
+    fontSize: 14,
+    color: colors.textPrimary,
+  },
+  confirmButton: {
+    marginTop: 20,
+    backgroundColor: '#22c55e',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+  },
+  confirmButtonText: { fontFamily: 'Inter-SemiBold', fontSize: 16, color: colors.accentText },
 });

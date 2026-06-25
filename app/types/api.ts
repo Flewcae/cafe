@@ -11,6 +11,17 @@ export interface User {
   permissions: string[];
 }
 
+export interface OrganizationSettings {
+  name: string;
+  themeColor: string;
+  logoLightUrl: string | null;
+  logoDarkUrl: string | null;
+  logoMinLightUrl: string | null;
+  logoMinDarkUrl: string | null;
+  faviconUrl: string | null;
+  updatedAt: string;
+}
+
 export interface AuthPayload {
   success: boolean;
   message: string;
